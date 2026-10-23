@@ -16,7 +16,7 @@
 //   optional, for the natural voice:
 //     AZURE_SPEECH_KEY     (Secret)  key of an Azure "Speech" resource
 //     AZURE_SPEECH_REGION  (Text)    its region, e.g. uaenorth or westeurope
-//     TTS_VOICE_EN (Text) voice name (default en-US-JennyNeural)
+//     TTS_VOICE_AR / TTS_VOICE_EN (Text) voice names (default ar-EG-SalmaNeural / en-US-JennyNeural)
 //   optional: MODEL (default claude-haiku-5-5)
 // Set spending limits in the Anthropic console (and Azure): the origin check stops
 // other websites, but not someone calling this URL directly.
@@ -34,7 +34,7 @@ const PREFIXES = [
 ];
 const CLINICAL = 'You support a licensed doctor reviewing a patient-approved symptom report.';
 const MAX_PROMPT = 12000;
-const VERSION = 3; // the app checks this to tell you when the worker code is out of date
+const VERSION = 4; // the app checks this to tell you when the worker code is out of date
 const MAX_TTS = 1500;
 
 function cors(origin, allowed) {
@@ -55,7 +55,7 @@ export function extractJson(text) {
 const xml = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c]);
 
 export function ssml(text, lang, rate, env) {
-  const voice = env.TTS_VOICE_EN || 'en-US-JennyNeural';
+  const voice = lang === 'ar' ? (env.TTS_VOICE_AR || 'ar-EG-SalmaNeural') : (env.TTS_VOICE_EN || 'en-US-JennyNeural');
   const locale = voice.split('-').slice(0, 2).join('-');
   const pct = Math.round((Math.min(1.6, Math.max(0.6, Number(rate) || 1)) - 1) * 100);
   return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${locale}"><voice name="${xml(voice)}"><prosody rate="${pct >= 0 ? '+' : ''}${pct}%">${xml(text)}</prosody></voice></speak>`;
@@ -71,7 +71,7 @@ export default {
     if (!c.ok) return json({ error: 'origin_not_allowed' }, 403, c.headers);
 
     if (url.pathname.endsWith('/status') && request.method === 'GET') {
-      return json({ version: VERSION, ai: !!env.ANTHROPIC_API_KEY, model: env.MODEL || 'claude-haiku-5-5', tts: !!(env.AZURE_SPEECH_KEY && env.AZURE_SPEECH_REGION), ttsProvider: env.AZURE_SPEECH_KEY ? 'Azure AI Speech' : null }, 200, c.headers);
+      return json({ version: VERSION, ai: !!env.ANTHROPIC_API_KEY, model: env.MODEL || 'claude-haiku-5-5', tts: !!(env.AZURE_SPEECH_KEY && env.AZURE_SPEECH_REGION), ttsProvider: env.AZURE_SPEECH_KEY ? 'Azure AI Speech' : null, ttsLangs: ['en', 'ar'] }, 200, c.headers);
     }
     if (request.method !== 'POST') return json({ error: 'method' }, 405, c.headers);
     let body;
@@ -81,7 +81,7 @@ export default {
       if (!env.AZURE_SPEECH_KEY || !env.AZURE_SPEECH_REGION) return json({ error: 'tts_not_configured' }, 501, c.headers);
       const text = typeof body?.text === 'string' ? body.text.trim() : '';
       if (!text || text.length > MAX_TTS) return json({ error: 'bad_text' }, 400, c.headers);
-      const lang = 'en';
+      const lang = body?.lang === 'ar' ? 'ar' : 'en';
       const r = await fetch(env.AZURE_TTS_URL || `https://${env.AZURE_SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`, {
         method: 'POST',
         headers: { 'Ocp-Apim-Subscription-Key': env.AZURE_SPEECH_KEY, 'Content-Type': 'application/ssml+xml', 'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3', 'User-Agent': 'accesscare-ai' },
