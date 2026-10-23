@@ -34,6 +34,7 @@ const PREFIXES = [
 ];
 const CLINICAL = 'You support a licensed doctor reviewing a patient-approved symptom report.';
 const MAX_PROMPT = 12000;
+const VERSION = 3; // the app checks this to tell you when the worker code is out of date
 const MAX_TTS = 1500;
 
 function cors(origin, allowed) {
@@ -70,7 +71,7 @@ export default {
     if (!c.ok) return json({ error: 'origin_not_allowed' }, 403, c.headers);
 
     if (url.pathname.endsWith('/status') && request.method === 'GET') {
-      return json({ ai: !!env.ANTHROPIC_API_KEY, tts: !!(env.AZURE_SPEECH_KEY && env.AZURE_SPEECH_REGION), ttsProvider: env.AZURE_SPEECH_KEY ? 'Azure AI Speech' : null }, 200, c.headers);
+      return json({ version: VERSION, ai: !!env.ANTHROPIC_API_KEY, model: env.MODEL || 'claude-haiku-5-5', tts: !!(env.AZURE_SPEECH_KEY && env.AZURE_SPEECH_REGION), ttsProvider: env.AZURE_SPEECH_KEY ? 'Azure AI Speech' : null }, 200, c.headers);
     }
     if (request.method !== 'POST') return json({ error: 'method' }, 405, c.headers);
     let body;
@@ -106,7 +107,9 @@ export default {
 
     if (!env.ANTHROPIC_API_KEY) return json({ error: 'not_configured' }, 500, c.headers);
     const prompt = typeof body?.prompt === 'string' ? body.prompt : '';
-    if (!prompt || prompt.length > MAX_PROMPT || !PREFIXES.some((p) => prompt.startsWith(p))) return json({ error: 'prompt_not_allowed' }, 400, c.headers);
+    if (!prompt) return json({ error: 'prompt_not_allowed' }, 400, c.headers);
+    if (prompt.length > MAX_PROMPT) return json({ error: 'prompt_too_long' }, 400, c.headers);
+    if (!PREFIXES.some((p) => prompt.startsWith(p))) return json({ error: 'prompt_not_allowed' }, 400, c.headers);
     const maxTokens = Math.min(prompt.startsWith(CLINICAL) ? 1600 : 1200, Math.max(100, Number(body?.max_tokens) || 400));
     const r = await fetch(env.ANTHROPIC_URL || 'https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -117,7 +120,12 @@ export default {
         messages: [{ role: 'user', content: prompt }],
       }),
     });
-    if (!r.ok) return json({ error: 'upstream', status: r.status }, 502, c.headers);
+    if (!r.ok) {
+      // Anthropic's own error message (e.g. invalid key, low credit, unknown model) — no secrets in it
+      let detail = '';
+      try { const e = await r.json(); detail = String(e?.error?.message ?? '').slice(0, 200); } catch { /* */ }
+      return json({ error: 'upstream', status: r.status, detail }, 502, c.headers);
+    }
     const data = await r.json();
     const text = (data?.content ?? []).filter((x) => x.type === 'text').map((x) => x.text).join('');
     return json({ json: extractJson(text) }, 200, c.headers);
