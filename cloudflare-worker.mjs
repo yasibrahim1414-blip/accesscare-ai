@@ -4,7 +4,7 @@
 // it). This worker keeps keys as Cloudflare secrets and forwards only
 // AccessCare's own requests.
 //
-//   POST /        → Claude (only AccessCare's fixed prompts; size-limited)
+//   POST /        → Claude (only AccessCare's fixed prompts; size-limited; a photo only for the medicine-package reader)
 //   POST /tts     → natural speech from Azure AI Speech (optional; mp3)
 //   POST /fda     → FDA drug label lookup by generic name (openFDA; only a medicine name is sent)
 //   GET  /status  → which services are configured (no secrets)
@@ -31,10 +31,15 @@ const PREFIXES = [
   'You are the voice of AccessCare AI',
   'You are AccessCare AI, a warm medical communication assistant',
   'You support a licensed doctor reviewing a patient-approved symptom report.',
+  'You read the printed text on a photo of a medicine package for AccessCare AI.',
+  'You are the AccessCare AI visit interpreter.',
 ];
+const VISION = 'You read the printed text on a photo of a medicine package for AccessCare AI.';
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_IMAGE_B64 = 1_600_000; // about 1.2 MB of image
 const CLINICAL = 'You support a licensed doctor reviewing a patient-approved symptom report.';
 const MAX_PROMPT = 12000;
-const VERSION = 5; // the app checks this to tell you when the worker code is out of date
+const VERSION = 6; // the app checks this to tell you when the worker code is out of date
 const MAX_TTS = 1500;
 
 const DEFAULT_ORIGINS = ['https://yasibrahim1414-blip.github.io'];
@@ -120,6 +125,13 @@ export default {
     if (!prompt) return json({ error: 'prompt_not_allowed' }, 400, c.headers);
     if (prompt.length > MAX_PROMPT) return json({ error: 'prompt_too_long' }, 400, c.headers);
     if (!PREFIXES.some((p) => prompt.startsWith(p))) return json({ error: 'prompt_not_allowed' }, 400, c.headers);
+    let image = null;
+    if (body?.image) {
+      const t = String(body.image.media_type || ''); const d = String(body.image.data || '');
+      if (!prompt.startsWith(VISION)) return json({ error: 'image_not_allowed' }, 400, c.headers);
+      if (!IMAGE_TYPES.includes(t) || !/^[A-Za-z0-9+/=]+$/.test(d) || d.length > MAX_IMAGE_B64) return json({ error: 'bad_image' }, 400, c.headers);
+      image = { type: 'image', source: { type: 'base64', media_type: t, data: d } };
+    }
     const maxTokens = Math.min(prompt.startsWith(CLINICAL) ? 1600 : 1200, Math.max(100, Number(body?.max_tokens) || 400));
     // try the configured model first, then the others, so an unavailable model name never breaks the app
     const models = [...new Set([env.MODEL, ...MODELS].filter(Boolean))];
@@ -131,7 +143,7 @@ export default {
         body: JSON.stringify({
           model, max_tokens: maxTokens,
           system: 'You are part of a healthcare communication app. Follow the instructions in the user message exactly and reply with only the JSON it asks for.',
-          messages: [{ role: 'user', content: prompt }],
+          messages: [{ role: 'user', content: image ? [image, { type: 'text', text: prompt }] : prompt }],
         }),
       });
       if (r.ok) break;
