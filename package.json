@@ -1,0 +1,21 @@
+{
+  "name": "accesscare-ai",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:web": "ACCESSCARE_AI_ENDPOINT=https://accesscare-ai.yasibrahim1414.workers.dev node scripts/build.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "test:server": "tsx tests/e2e/cloudServer.ts 8787"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-icons": "5.7.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "tsx": "4.23.12",
+    "typescript": "6.0.3"
+  }
+}
