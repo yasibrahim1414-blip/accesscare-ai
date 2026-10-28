@@ -7,6 +7,8 @@ import { converse } from '../src/services/conversation/ai';
 test('AI errors are explained in plain English with a fix', () => {
   assert.match(explainAIError('400 prompt_not_allowed').problem, /older version/);
   assert.match(explainAIError('500 not_configured').fix, /ANTHROPIC_API_KEY/);
+  assert.match(explainAIError('502 upstream 403 — Request not allowed (server location: DXB)').fix, /Placement → choose Smart/);
+  assert.match(explainAIError('502 upstream 401 — invalid x-api-key').problem, /API key/);
   assert.match(explainAIError('403 origin_not_allowed').fix, /ALLOWED_ORIGINS/);
   assert.match(explainAIError('502 upstream 400 — Your credit balance is too low').problem, /credit/);
   assert.match(explainAIError('502 upstream 401 — invalid x-api-key').problem, /API key/);

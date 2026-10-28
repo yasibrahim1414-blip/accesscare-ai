@@ -21,6 +21,7 @@ export function explainAIError(err: string): AIProblem {
     if (/credit|balance|billing/.test(e)) return { problem: 'Claude refused because the API account has no credit left.', fix: 'Add credit in the Claude Console (Billing).' };
     if (/401|invalid.{0,3}api.key|authentication/.test(e)) return { problem: 'Claude refused the API key (it is wrong or was deleted).', fix: 'Create a new key in the Claude Console and replace ANTHROPIC_API_KEY in the worker, then Deploy.' };
     if (/404|model/.test(e)) return { problem: 'Claude does not know the model name set in the worker.', fix: 'Remove the MODEL variable in the worker (it then uses claude-haiku-5-5), or set a valid model name.' };
+    if (/403|request not allowed|forbidden/.test(e)) return { problem: 'Claude (Anthropic) refused requests coming from the place where your Cloudflare worker runs. This is usually about the server’s location, not your key.', fix: 'In Cloudflare: your worker → Settings → General → Placement → choose Smart, then wait a few minutes and test again. If it continues, check in the Claude Console that the API key and organization are active.' };
     if (/429|rate/.test(e)) return { problem: 'Too many AI requests at once (rate limit).', fix: 'Wait a minute and try again.' };
     if (/529|overloaded/.test(e)) return { problem: 'Claude is busy right now.', fix: 'Try again in a moment.' };
     return { problem: `Claude returned an error (${err}).`, fix: 'Try again; if it keeps happening, check the Claude Console.' };

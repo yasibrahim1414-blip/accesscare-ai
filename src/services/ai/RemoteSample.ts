@@ -14,7 +14,7 @@ export function remoteSample(endpoint: string): SampleFn {
     catch (e) { remoteStatus.ok = false; remoteStatus.error = 'network'; throw Object.assign(new Error('AI service unreachable'), { code: 'unavailable', cause: e, detail: 'network' }); }
     if (!r.ok) {
       let detail = '';
-      try { const b = (await r.json()) as { error?: string; status?: number; detail?: string }; detail = `${b.error ?? ''}${b.status ? ` ${b.status}` : ''}${b.detail ? ` — ${b.detail}` : ''}`.trim(); } catch { /* */ }
+      try { const b = (await r.json()) as { error?: string; status?: number; detail?: string; colo?: string | null }; detail = `${b.error ?? ''}${b.status ? ` ${b.status}` : ''}${b.detail ? ` — ${b.detail}` : ''}${b.colo ? ` (server location: ${b.colo})` : ''}`.trim(); } catch { /* */ }
       remoteStatus.ok = false; remoteStatus.error = `${r.status}${detail ? ` ${detail}` : ''}`;
       // a refused proxy call is a setup problem, not the patient declining AI
       throw Object.assign(new Error(`AI service ${r.status}`), { code: 'unavailable', detail: remoteStatus.error });

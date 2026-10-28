@@ -272,7 +272,8 @@ export default {
       const modelProblem = r.status === 404 || (r.status === 400 && /model/i.test(detail));
       if (!modelProblem) break;
     }
-    if (!r.ok) return json({ error: 'upstream', status: r.status, detail }, 502, c.headers);
+    // 403 'Request not allowed' usually means Anthropic refused the place the worker ran from (request.cf.colo)
+    if (!r.ok) return json({ error: 'upstream', status: r.status, detail, colo: request.cf?.colo ?? null }, 502, c.headers);
     const data = await r.json();
     const text = (data?.content ?? []).filter((x) => x.type === 'text').map((x) => x.text).join('');
     return json({ json: extractJson(text) }, 200, c.headers);
