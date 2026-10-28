@@ -30,6 +30,8 @@ export interface SignUpInput {
   password: string;
   specialty?: string;
   clinic?: string;
+  /** set by the website's server backend so the Patient ID it logs in with is the one stored */
+  patientCode?: string;
 }
 
 export interface Me {
@@ -77,7 +79,7 @@ export interface AuthInfo {
 }
 
 export interface Backend {
-  readonly mode: 'local-demo' | 'supabase' | 'claude-cloud';
+  readonly mode: 'local-demo' | 'supabase' | 'claude-cloud' | 'server';
   readonly persistent: boolean;
   /** true only when data really syncs between devices through a server */
   readonly shared: boolean;

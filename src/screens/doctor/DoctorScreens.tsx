@@ -337,7 +337,7 @@ export function DoctorWorkspace({ id }: { id: string }) {
         {tab === 'clinical' && <ClinicalPanel view={v.data} messages={msgs.data ?? []} reloadMessages={msgs.reload} patientPrefs={prefs} />}
         {tab === 'body' && (rec ? <Reconstruction3D rec={rec} height={360} /> : <BodySelector selected={c.regionIds} readOnly focus={c.regionIds[0] ?? null} />)}
         {tab === 'notes' && <>
-          <Banner kind="info">Clinician notes are private to you. They are stored separately from the patient’s report{backend.mode === 'claude-cloud' ? ', encrypted with your password,' : ''} and are never shown to the patient.</Banner>
+          <Banner kind="info">Clinician notes are private to you. They are stored separately from the patient’s report{(backend.mode === 'claude-cloud' || backend.mode === 'server') ? ', encrypted with your password,' : ''} and are never shown to the patient.</Banner>
           <div className="stack">
             {(notes.data ?? []).map((n) => <div key={n.id} className="card" style={{ gap: 4 }}><div className="row between"><span className="tiny muted">{fmtDate(n.createdAt)}</span><span className="prov prov-clinician">Clinician</span></div><span style={{ whiteSpace: 'pre-wrap' }}>{n.body}</span></div>)}
             {notes.data?.length === 0 && <Empty icon={<LuNotebookPen />} title="No notes yet" />}

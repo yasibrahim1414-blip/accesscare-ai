@@ -4,6 +4,7 @@ Run:          tsx tests/e2e/cloudServer.ts 8787 &   then   python3 tests/e2e/web
 import re, urllib.request
 from playwright.sync_api import sync_playwright, expect
 calls = lambda: int(urllib.request.urlopen('http://localhost:8787/ai-calls').read())
+urllib.request.urlopen('http://localhost:8787/web-db?on=0').read()  # this test covers the website's offline-demo mode (no shared server)
 with sync_playwright() as p:
     b = p.chromium.launch(); pg = b.new_page(viewport={'width': 390, 'height': 844}); errs = []
     pg.on('pageerror', lambda e: errs.append(str(e)))

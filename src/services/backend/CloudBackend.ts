@@ -252,7 +252,7 @@ export class CloudBackend implements Backend {
       const cgDoc: CaregiverDoc = { v: 1, caregiverId, name: fullName, pub, since: now() };
       await this.put(`cg/${uid}`, cgDoc);
     } else {
-      acct.patientCode = generatePatientId();
+      acct.patientCode = input.patientCode && /^AC-PAT-[A-Z0-9]{6}$/.test(input.patientCode) ? input.patientCode : generatePatientId();
       await this.put(`pat/${uid}`, { v: 1, pub, doctorUid: null, linkActive: false, linkSince: null, sealedLink: null });
     }
     await this.put(`data/users/${uid}/${input.role}`, acct);

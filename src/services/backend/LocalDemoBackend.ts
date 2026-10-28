@@ -84,6 +84,14 @@ export class LocalDemoBackend implements Backend {
 
   get persistent() { return this.store.persistent; }
 
+  /** other tabs of this browser changed the data: re-read (the demo has no server, so other devices never see it) */
+  onChange(cb: () => void): () => void {
+    if (typeof window === 'undefined') return () => {};
+    const h = (e: StorageEvent) => { if (e.key === DB_KEY) cb(); };
+    window.addEventListener('storage', h);
+    return () => window.removeEventListener('storage', h);
+  }
+
   // ---------- storage ----------
   private load(): DB {
     const raw = this.store.get(DB_KEY);

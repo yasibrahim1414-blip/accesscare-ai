@@ -83,7 +83,9 @@ export function BlindProvider({ children }: { children: React.ReactNode }) {
   const { nav, me, backend, ai } = app;
   const lang = useLang();
   const [prefs, setPrefsState] = useState<BlindPrefs | null>(() => deviceBlind());
-  const on = !!prefs?.enabled;
+  // Blind Mode is for patients (and signed-out visitors); doctor accounts never get it
+  const isDoctor = me?.profile.role === 'doctor';
+  const on = !!prefs?.enabled && !isDoctor;
   const suspended = VOICE_ROUTES.has(nav.route.name);
   const [status, setStatus] = useState<Status>('idle');
   const [heard, setHeard] = useState('');
@@ -489,6 +491,7 @@ Reply with only JSON: {"action":"press"|"open"|"back"|"help"|"read_page"|"read_f
 
   // ------------------------------------------------------------------ on / off
   const enable = useCallback((how: 'gesture' | 'button' | 'keyboard') => {
+    if (R.current.me?.profile.role === 'doctor') return;
     unlockAudio();
     const p = { ...(deviceBlind() ?? defaultBlind()), enabled: true };
     setDeviceBlind(p); R.current.prefs = p; R.current.on = true;

@@ -98,8 +98,10 @@ export function LangSwitch({ wide }: { wide?: boolean }) {
 
 export function BlindButton({ wide }: { wide?: boolean }) {
   const blind = useBlind();
+  const { me } = useApp();
   const lang = useLang();
   const ar = lang === 'ar';
+  if (me?.profile.role === 'doctor') return null; // Blind Mode is not offered on doctor accounts
   return (
     <button className={`util-btn blind${blind.on ? ' on' : ''}${wide ? ' wide' : ''}`} data-no-tr data-testid="global-blind" aria-pressed={blind.on}
       onClick={() => (blind.on ? blind.disable() : blind.enable('button'))}

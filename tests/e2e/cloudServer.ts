@@ -151,6 +151,7 @@ function fakeTeach(prompt: string): unknown {
 let aiProxyCalls = 0;
 let aiMode = 'ok';
 let boxKind = '';
+let webDb = true; // the website's shared storage (worker /db, memory store here)
 const fdaCalls: string[] = [];
 createServer(async (req, res) => {
   const url = new URL(req.url!, `http://localhost:${port}`);
@@ -202,7 +203,7 @@ ${shim(url.searchParams.get('uid') ?? 'anon', url.searchParams.get('name') ?? ''
   // the web build's Claude proxy (server/cloudflare-worker.mjs) running here, with a fake Claude API behind it
   if (url.pathname === '/collect') { let b = ''; for await (const c of req) b += c; try { for (const t of JSON.parse(b)) collected.add(t); } catch { /* */ } if (req.method === 'GET') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify([...collected])); return; } res.writeHead(204); res.end(); return; }
   if (url.pathname === '/ai-mode') { aiMode = url.searchParams.get('m') ?? 'ok'; res.writeHead(200); res.end(aiMode); return; }
-  if (url.pathname === '/ai' || url.pathname === '/ai/status' || url.pathname === '/fake-anthropic') {
+  if (url.pathname === '/ai' || url.pathname === '/ai/status' || url.pathname === '/ai/db' || url.pathname === '/fake-anthropic') {
     let body = ''; for await (const c of req) body += c;
     if (url.pathname === '/fake-anthropic') {
       aiProxyCalls++;
@@ -230,8 +231,8 @@ ${shim(url.searchParams.get('uid') ?? 'anon', url.searchParams.get('name') ?? ''
     }
     const worker = (await import('../../server/cloudflare-worker.mjs')).default;
     if (aiMode === 'old' && url.pathname === '/ai/status') { res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*' }); res.end(JSON.stringify({ ai: true, tts: false })); return; }
-    const r: Response = await worker.fetch(new Request('http://x' + url.pathname, { method: req.method, headers: { origin: String(req.headers.origin ?? ''), 'content-type': 'application/json' }, body: req.method === 'POST' ? body : undefined }),
-      { ...(aiMode === 'nokey' ? {} : { ANTHROPIC_API_KEY: 'test-key' }), ALLOWED_ORIGINS: '*', ANTHROPIC_URL: `http://localhost:${port}/fake-anthropic` });
+    const r: Response = await worker.fetch(new Request('http://x' + url.pathname, { method: req.method, headers: { origin: String(req.headers.origin ?? ''), 'content-type': 'application/json', ...(req.headers['x-ac-auth'] ? { 'x-ac-auth': String(req.headers['x-ac-auth']) } : {}) }, body: req.method === 'POST' ? body : undefined }),
+      { ...(aiMode === 'nokey' ? {} : { ANTHROPIC_API_KEY: 'test-key' }), ...(webDb ? { MEMORY_DB: '1' } : {}), ALLOWED_ORIGINS: '*', ANTHROPIC_URL: `http://localhost:${port}/fake-anthropic` });
     const h: Record<string, string> = {}; r.headers.forEach((v, k) => { h[k] = v; });
     res.writeHead(r.status, h); res.end(await r.text()); return;
   }
@@ -254,7 +255,8 @@ ${shim(url.searchParams.get('uid') ?? 'anon', url.searchParams.get('name') ?? ''
   if (url.pathname === '/fda-calls') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(fdaCalls)); return; }
   if (url.pathname === '/fake-converse') { let body = ''; for await (const c of req) body += c; res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(fakeConverse(body))); return; }
   if (url.pathname === '/ai-calls') { res.writeHead(200); res.end(String(aiProxyCalls)); return; }
-  if (url.pathname === '/reset') { cloud.store.clear(); aiMode = 'ok'; boxKind = ''; res.writeHead(200); res.end('ok'); return; }
+  if (url.pathname === '/web-db') { webDb = url.searchParams.get('on') !== '0'; res.writeHead(200); res.end(String(webDb)); return; }
+  if (url.pathname === '/reset') { cloud.store.clear(); aiMode = 'ok'; boxKind = ''; webDb = true; (await import('../../server/cloudflare-worker.mjs')).__resetMemoryDb(); res.writeHead(200); res.end('ok'); return; }
   if (url.pathname === '/dump') { // test inspection: raw stored documents
     writeFileSync('/tmp/claude-0/cloud-dump.json', JSON.stringify([...cloud.store.entries()], null, 1));
     res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify([...cloud.store.entries()])); return;

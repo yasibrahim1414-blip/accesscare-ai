@@ -95,7 +95,7 @@ export function WelcomeScreen() {
           <div className="stack" style={{ gap: 16 }}>
             <div className="feature"><div className="fi"><LuPersonStanding /></div><div><b>Point to it on the body</b><p className="small muted">Turn a detailed 3D body and tap the area. A flat map and a simple list work too.</p></div></div>
             <div className="feature"><div className="fi"><LuSparkles /></div><div><b>Questions that fit you</b><p className="small muted">Yes/No, pictures or short choices fill in what’s missing. Nothing is guessed.</p></div></div>
-            <div className="feature"><div className="fi"><LuShieldCheck /></div><div><b>You approve every word</b><p className="small muted">Only the summary you confirm goes to the doctor you chose{backend.mode === 'claude-cloud' ? ', encrypted so only the two of you can read it' : ''}.</p></div></div>
+            <div className="feature"><div className="fi"><LuShieldCheck /></div><div><b>You approve every word</b><p className="small muted">Only the summary you confirm goes to the doctor you chose{backend.mode === 'claude-cloud' || backend.mode === 'server' ? ', encrypted so only the two of you can read it' : ''}.</p></div></div>
           </div>
           <div className="stack">
             <Button big block onClick={() => nav.push({ name: 'signup' })}>Create an account</Button>
@@ -193,7 +193,7 @@ export function SignInScreen({ email: initialEmail, notice }: { email?: string; 
                 ))}
               </div>
             )}
-            <Field id="signin-email" label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" inputMode="email" />
+            <Field id="signin-email" label="Email or Patient ID" value={email} onChange={setEmail} autoComplete="username" />
           </>}
           {(!cloud || roles.length > 0) && <Field id="signin-password" label={cloud ? 'AccessCare password' : 'Password'} type="password" value={password} onChange={setPassword} autoComplete="current-password" />}
           {!cloud && email.endsWith('@accesscare.demo') && <p className="small muted">Demo account password: <span className="mono">demo-pass-123</span></p>}
@@ -336,6 +336,7 @@ export function SignUpScreen() {
           {formErr && <Banner kind="danger">{formErr}</Banner>}
           <Button big block type="submit" busy={busy}>Continue Registration</Button>
           <p className="tiny muted">{backend.mode === 'claude-cloud' ? 'Saved to the shared AccessCare database, so you can log in from any device signed in to this Claude account.'
+            : backend.mode === 'server' ? 'Saved to the AccessCare server, encrypted on this device — log in from any phone or computer with your email and password.'
             : backend.mode === 'supabase' ? 'Saved to the AccessCare server.' : 'Offline demo: this account lives only in this browser.'}</p>
         </form>
       </div>

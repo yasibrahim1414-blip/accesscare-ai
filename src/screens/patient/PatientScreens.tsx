@@ -275,7 +275,7 @@ export function MyDoctorScreen() {
           </div>
           <div className="card tinted">
             <div className="row" style={{ alignItems: 'flex-start' }}><LuShieldCheck style={{ color: 'var(--teal-ink)', fontSize: '1.3em', flex: 'none' }} aria-hidden />
-              <p className="small">{doctor.data.fullName} can read only the consultations you approve and share, plus your communication preferences if you allow it.{backend.mode === 'claude-cloud' ? ' Shared records are encrypted so only the two of you can read them.' : ''}</p></div>
+              <p className="small">{doctor.data.fullName} can read only the consultations you approve and share, plus your communication preferences if you allow it.{(backend.mode === 'claude-cloud' || backend.mode === 'server') ? ' Shared records are encrypted so only the two of you can read them.' : ''}</p></div>
           </div>
           <Button variant="danger-outline" block onClick={() => setConfirm(true)}><LuUnlink aria-hidden /> Disconnect Doctor</Button>
         </>) : (

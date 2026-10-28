@@ -6,6 +6,7 @@ import urllib.request
 from playwright.sync_api import sync_playwright, expect
 SPEECH = open(__file__.replace('blind_web.py', 'blind_flow.py')).read().split('SPEECH = """')[1].split('"""')[0]
 calls = lambda: int(urllib.request.urlopen('http://localhost:8787/ai-calls').read())
+urllib.request.urlopen('http://localhost:8787/web-db?on=0').read()  # this test covers the website's offline-demo mode (no shared server)
 with sync_playwright() as p:
     b = p.chromium.launch(); ctx = b.new_context(viewport={'width': 390, 'height': 844}); ctx.add_init_script(SPEECH)
     pg = ctx.new_page(); errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))

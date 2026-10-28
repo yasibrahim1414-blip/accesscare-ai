@@ -40,8 +40,8 @@ export function SettingsScreen() {
         <h3 className="section">Data</h3>
         <div className="card tinted" style={{ gap: 8 }}>
           <div className="row"><span className="li-ico" style={{ width: 38, height: 38, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'var(--surface)' }}>{backend.shared ? <LuCloud /> : <LuDatabase />}</span>
-            <div className="grow"><b>{backend.mode === 'claude-cloud' ? 'Shared cloud database' : backend.mode === 'supabase' ? 'AccessCare server (Supabase)' : 'Offline demo storage'}</b>
-              <div className="small muted">{backend.mode === 'claude-cloud' ? 'Synced across your devices. Health records are end-to-end encrypted.'
+            <div className="grow"><b>{backend.mode === 'claude-cloud' ? 'Shared cloud database' : backend.mode === 'server' ? 'AccessCare server' : backend.mode === 'supabase' ? 'AccessCare server (Supabase)' : 'Offline demo storage'}</b>
+              <div className="small muted">{backend.mode === 'claude-cloud' || backend.mode === 'server' ? 'Synced across your devices. Health records are end-to-end encrypted.'
                 : backend.mode === 'supabase' ? 'Synced across devices, protected by row-level security.'
                 : backend.persistent ? 'Stored in this browser only. Not synced.' : 'Browser storage is blocked: data is lost when you close the app.'}</div></div></div>
         </div>
@@ -95,6 +95,7 @@ export function AboutScreen() {
         <div className="card">
           <div className="row"><LuShieldCheck style={{ color: 'var(--teal-ink)', fontSize: '1.3em' }} aria-hidden /><b>What is real here</b></div>
           <ul className="small" style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 5 }}>
+            {mode === 'server' && <li>Accounts and end-to-end encrypted records stored through the AccessCare server (Cloudflare D1), synced across devices.</li>}
             {mode === 'claude-cloud' && <>
               <li>A shared, server-side database: accounts, connections, consultations, status and messages sync between devices.</li>
               <li>Login uses your Claude account plus an AccessCare password for each role.</li>

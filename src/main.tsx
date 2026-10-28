@@ -11,6 +11,7 @@ import { App } from './app/App';
 import { CSS } from './ui/styles';
 import type { Backend } from './services/backend/Backend';
 import { LocalDemoBackend } from './services/backend/LocalDemoBackend';
+import { WebSyncBackend } from './services/backend/WebSyncBackend';
 import { CloudBackend } from './services/backend/CloudBackend';
 import { SupabaseBackend } from './services/backend/SupabaseBackend';
 import type { CloudDb, CloudUser } from './services/backend/cloudDb';
@@ -63,6 +64,15 @@ async function pickBackend(): Promise<{ backend: Backend; note?: string }> {
     ]) as [CloudDb | null, CloudUser | null];
     if (db && user && (await user.id())) return { backend: new CloudBackend(db, user) };
     return { backend: new LocalDemoBackend(createDefaultStore()), note: 'The shared database is not available in this view (you may be signed out of Claude or have view-only access), so the offline demo is open.' };
+  }
+  // website: the AccessCare worker's shared storage, when it is set up (worker v7 with a D1 database)
+  const endpoint = typeof __AI_ENDPOINT__ === 'string' ? __AI_ENDPOINT__ : '';
+  if (endpoint) {
+    try {
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 6000);
+      const st = await fetch(endpoint.replace(/\/+$/, '') + '/status', { signal: ctl.signal }).then((r) => (r.ok ? r.json() : null)).finally(() => clearTimeout(t));
+      if (st?.db) return { backend: new WebSyncBackend(endpoint) };
+    } catch { /* server unreachable: offline demo below */ }
   }
   return { backend: new LocalDemoBackend(createDefaultStore()) };
 }

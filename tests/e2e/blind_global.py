@@ -85,7 +85,23 @@ with sync_playwright() as p:
     btn(doc, 'Continue Registration').click(); doc_id = doc.get_by_test_id('doctor-id').inner_text().strip(); btn(doc, 'Go to my dashboard').click()
     wait_route(doc, 'd.overview')
 
-    # ---------- 1. three left swipes on the doctor dashboard ----------
+    # ---------- 0. doctors do not get Blind Mode ----------
+    assert doc.get_by_test_id('global-blind').count() == 0, 'no Blind Mode button for doctors'
+    swipe_left_3(doc); doc.keyboard.press('Alt+Shift+B'); doc.wait_for_timeout(700)
+    assert doc.get_by_test_id('blind-bar').count() == 0
+    ok('doctor account: no Blind Mode button, and three left swipes or Alt+Shift+B do not turn it on')
+
+    # ---------- 1. three left swipes on a patient's home screen ----------
+    bm = device('u-bm', 'Huda')
+    btn(bm, 'Create an account').click(); bm.get_by_test_id('role-patient').click(); btn(bm, 'Continue').click()
+    bm.fill('#su-name', 'Huda Samir'); bm.fill('#su-password', 'patient-pass-9'); bm.fill('#su-confirm', 'patient-pass-9')
+    btn(bm, 'Continue Registration').click()
+    expect(bm.get_by_test_id('onboard-question')).to_be_visible(timeout=30000)
+    for _ in range(9):
+        if bm.get_by_test_id('onboard-question').count() == 0: break
+        bm.locator('[data-testid^="onb-"]').nth(1 if 'AI' in bm.get_by_test_id('onboard-question').inner_text() else 0).click(); bm.wait_for_timeout(500)
+    bm.get_by_test_id('onboard-finish').click(); wait_route(bm, 'p.home')
+    doc = bm  # the steps below drive this patient account
     assert doc.get_by_test_id('blind-bar').count() == 0
     # an ordinary vertical scroll and a single swipe do not activate it
     doc.evaluate("""() => { const el = document.querySelector('[data-screen-root]'); const ev = (type, x, y) => el.dispatchEvent(new PointerEvent(type, { pointerId: 7, pointerType: 'touch', clientX: x, clientY: y, bubbles: true }));
@@ -93,8 +109,8 @@ with sync_playwright() as p:
     doc.wait_for_timeout(300); assert doc.get_by_test_id('blind-bar').count() == 0, 'a scroll does not turn on Blind Mode'
     swipe_left_3(doc)
     expect(doc.get_by_test_id('blind-bar')).to_be_visible(timeout=5000)
-    wait_spoken(doc, 'Blind Mode is on'); wait_spoken(doc, 'Doctor dashboard'); wait_spoken(doc, 'microphone')
-    ok('doctor dashboard: three quick left swipes turned on Blind Mode on the spot (a scroll did not); it said it is on, which screen this is, and asked for the microphone')
+    wait_spoken(doc, 'Blind Mode is on'); wait_spoken(doc, 'microphone')
+    ok('patient home: three quick left swipes turned on Blind Mode on the spot (a scroll did not); it said it is on and asked for the microphone')
     clear(doc); doc.get_by_test_id('blind-mic-allow').click()
     doc.wait_for_function('window.__recStarts > 0', timeout=5000)
     expect(doc.get_by_test_id('blind-status')).to_contain_text('Listening', timeout=5000)
@@ -102,11 +118,11 @@ with sync_playwright() as p:
 
     # ---------- 2. real actions by voice ----------
     say(doc, 'what can I do here', 'On this screen you can choose'); wait_spoken(doc, 'Pages:')
-    s = spoken(doc); assert 'Copy ID' in s and 'Patients' in s, s
-    ok('"what can I do here" lists the real controls on this screen (e.g. Copy ID, Patients) — read from the page, not invented')
-    say(doc, 'open my patients'); wait_route(doc, 'd.patients'); wait_spoken(doc, 'My patients')
-    ok('"open my patients" opened the Patients page and announced it')
-    say(doc, 'go back'); doc.wait_for_function('document.querySelector("[data-route]")?.dataset.route !== "d.patients"', timeout=8000)
+    s = spoken(doc); assert 'Start New Consultation' in s and 'Diary' in s, s
+    ok('"what can I do here" lists the real controls on this screen (e.g. Start New Consultation, Diary) — read from the page, not invented')
+    say(doc, 'open my diary'); wait_route(doc, 'p.diary'); wait_spoken(doc, 'My diary')
+    ok('"open my diary" opened the Diary page and announced it')
+    say(doc, 'go back'); doc.wait_for_function('document.querySelector("[data-route]")?.dataset.route !== "p.diary"', timeout=8000)
     say(doc, 'open settings'); wait_route(doc, 'settings'); wait_spoken(doc, 'Settings')
     say(doc, 'read the page', 'Settings')
     ok('"go back", "open settings" and "read the page" all worked on the real screens')
@@ -120,23 +136,26 @@ with sync_playwright() as p:
 
     # ---------- 3. stays on while moving around (tabs, reload) ----------
     doc.get_by_role('button', name='Go back').first.click(); doc.wait_for_timeout(300)
-    doc.locator('.tab', has_text='Consultations').click(); wait_route(doc, 'd.consults')
-    expect(doc.get_by_test_id('blind-bar')).to_be_visible(); wait_spoken(doc, 'Consultations')
-    doc.reload(); expect(doc.get_by_test_id('blind-bar')).to_be_visible(timeout=15000); wait_spoken(doc, 'Blind Mode is on')
-    ok('Blind Mode stayed on when switching tabs and after reloading the page (remembered on this device)')
+    doc.locator('.tab', has_text='History').click(); wait_route(doc, 'p.history')
+    expect(doc.get_by_test_id('blind-bar')).to_be_visible(); wait_spoken(doc, 'History|reports|consultations')
     clear(doc); before = route(doc); swipe_right_3(doc)
     expect(doc.get_by_test_id('blind-bar')).to_have_count(0, timeout=5000); wait_spoken(doc, 'Blind Mode is off')
     assert route(doc) == before, f'stayed on the same screen, not {route(doc)}'
     swipe_left_3(doc); expect(doc.get_by_test_id('blind-bar')).to_be_visible(timeout=5000); wait_spoken(doc, 'swipe right three times')
     doc.wait_for_function("document.querySelector('[data-testid=blind-status]')?.textContent.includes('Listening')", timeout=8000)
-    ok('three quick right swipes turned Blind Mode off (on the same screen, said aloud); three left swipes turned it back on and it went straight back to listening')
+    ok('Blind Mode stayed on when switching tabs; three quick right swipes turned it off (on the same screen, said aloud); three left swipes turned it back on and it went straight back to listening')
+    doc.reload(); wait_route(doc, 'va', 20000)
+    ok('after a reload a patient who uses Blind Mode goes straight to the spoken guide (remembered on this device)')
+    swipe_right_3(doc); wait_route(doc, 'p.home', 10000); expect(doc.get_by_test_id('blind-bar')).to_have_count(0, timeout=5000)
+    swipe_left_3(doc); expect(doc.get_by_test_id('blind-bar')).to_be_visible(timeout=5000)
+    doc.wait_for_function("document.querySelector('[data-testid=blind-status]')?.textContent.includes('Listening')", timeout=10000)
 
     # ---------- 4. Arabic ----------
     say(doc, 'change the language to Arabic', 'بالعربي')
     doc.wait_for_function("document.documentElement.dir === 'rtl'", timeout=5000)
     assert doc.evaluate("window.__langs[window.__langs.length - 1]").startswith('ar'), 'spoken with an Arabic voice'
     doc.wait_for_function("window.__recLangs.length && window.__recLangs[window.__recLangs.length - 1].startsWith('ar')", timeout=8000)
-    try: expect(doc.locator('.tab[aria-current=page]')).to_contain_text('نظرة عامة')
+    try: expect(doc.locator('.tab[aria-current=page]')).to_contain_text('الرئيسية')
     except Exception: print(doc.evaluate("Array.from(document.querySelectorAll('.tab')).map(t=>t.outerHTML).join('\\n')"), doc.evaluate("document.querySelector('[data-route]')?.dataset.route")); raise
     ok('"change the language to Arabic": the interface switched to Arabic right-to-left on the same screen, and Blind Mode now speaks and listens in Arabic')
     say(doc, 'افتح الإعدادات'); wait_route(doc, 'settings')
@@ -150,7 +169,7 @@ with sync_playwright() as p:
     say(doc, 'no', 'did not do it'); assert route(doc) != 'welcome'
     say(doc, 'log out', 'Say yes or no'); say(doc, 'yes', 'logged out'); wait_route(doc, 'welcome')
     say(doc, 'read my latest report', 'log in first')
-    assert 'Dr. Layla Hassan' not in doc.inner_text('#root')
+    assert 'Huda Samir' not in doc.inner_text('#root')
     ok('logging out asked first ("no" did nothing; "yes" logged out); afterwards nothing from the account is readable — "read my latest report" asks to log in')
 
     # ---------- 6. exit ----------
