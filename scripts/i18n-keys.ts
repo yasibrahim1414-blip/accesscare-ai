@@ -9,7 +9,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import ts from 'typescript';
 
-const ROOT = path.resolve(__dirname, '..');
+// works as a CommonJS or an ES module (package.json may say "type": "module")
+const HERE = typeof __dirname !== 'undefined' ? __dirname : path.dirname(decodeURIComponent(new URL(import.meta.url).pathname));
+const ROOT = path.resolve(HERE, '..');
 const SKIP = /src\/(i18n\/(ar|fr|ur|hi|dict)\.ts|vendor\/|services\/langWords\.ts)/;
 
 export interface Key { en: string; ar?: string; file: string; template?: boolean; jsx?: boolean }

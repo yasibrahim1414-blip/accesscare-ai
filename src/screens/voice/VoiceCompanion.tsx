@@ -79,7 +79,6 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
   const [formErr, setFormErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [f, setF] = useState({ login: '', password: '', confirm: '', code: '', doctorId: '', email: '' });
-  const fState = f;
   const voiceInput = bp.input === 'voice' && sttSupported() && micConsent === 'yes';
 
   const speaker = useMemo(() => new Speaker((s) => { setPaused(s.paused); setStatus((cur) => (s.speaking ? 'speaking' : cur === 'speaking' ? 'idle' : cur)); }), []);
@@ -344,9 +343,6 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
   // ---------------------------------------------------------------- forms (typed, never spoken)
   async function submitForm(kind: 'signup' | 'login' | 'recover' | 'doctor') {
     setFormErr(null); setBusy(true);
-    // what is in the fields right now (a password manager or fast typing can submit before the last change is rendered)
-    const now = (id: string, v: string) => { const el = document.getElementById(id); return el instanceof HTMLInputElement ? el.value : v; };
-    const f = { ...fState, email: now('va-email', fState.email), login: now('va-login', fState.login), code: now('va-code', fState.code), password: now('va-password', fState.password), confirm: now('va-confirm', fState.confirm), doctorId: now('va-doctor', fState.doctorId) };
     try {
       if (kind === 'signup') {
         if (f.password.length < 8) throw new Error(L(lang, 'The password needs at least 8 characters.', 'كلمة السر لازم تكون ٨ حروف على الأقل.'));

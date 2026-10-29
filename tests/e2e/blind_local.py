@@ -21,6 +21,7 @@ with sync_playwright() as p:
     say('continue', 'recovery code'); say('continue', 'Doctor ID'); say('no', 'AI help is not available')
     say('log out', 'Log out'); say('yes', 'logged out'); wait('create a new account, or log in')
     say('log in', 'Patient ID or email')
+    expect(pg.locator('#va-login')).to_be_visible(); pg.wait_for_timeout(300)  # the login form is on screen and settled
     pg.fill('#va-login', pid.lower()); pg.fill('#va-password', 'local-pass-1'); pg.evaluate('window.__spoken.length = 0'); pg.get_by_test_id('va-form-submit').click()
     wait('Welcome back')
     assert not errs, errs

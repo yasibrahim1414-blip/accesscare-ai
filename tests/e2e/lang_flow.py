@@ -77,6 +77,7 @@ with sync_playwright() as p:
         for _ in range(3): pg.mouse.click(195, 160); pg.wait_for_timeout(120)
         wait(d['active']); pg.get_by_test_id('mic-allow').click()
         say(d['new'], d['device']); say(d['yes'], d['name_q']); say('Sara Ahmed', d['heard']); say(d['yes'], d['pw'])
+        expect(pg.locator('#va-confirm')).to_be_visible(); pg.wait_for_timeout(300)  # the password form is on screen and settled
         pg.fill('#va-password', 'lang-pass-123'); pg.fill('#va-confirm', 'lang-pass-123'); pg.evaluate('window.__spoken.length = 0'); pg.get_by_test_id('va-form-submit').click()
         wait(d['pid']); say(d['cont'], d['rec']); say(d['cont'], d['doc'])
         say(d['no'], d['ai']); say(d['no'], d['menu'])
