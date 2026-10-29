@@ -7,14 +7,17 @@ import { BodySelector } from '../../body/BodySelector';
 import { regionLabel, regionLabelIn } from '../../domain/bodyRegions';
 import type { Message, MessageMeta } from '../../domain/types';
 import type { ProbeAnswer, TBPoint } from '../../domain/interact';
-import { useLang, tr, type Lang } from '../../i18n/lang';
-import { Listener, sttSupported, ERROR_TEXT } from '../../services/voice/Speech';
+import { useLang, tr, pick, listSep, type Lang } from '../../i18n/lang';
+import { Listener, sttSupported, errText } from '../../services/voice/Speech';
+import { translateTo } from '../../i18n/dict';
 import { AIStatus } from './AIStatus';
 import { planPoints, planSource, checkTeachBack } from '../../services/teachback/check';
 import { randomId } from '../../services/crypto';
 
 type Send = (body: string, kind: Message['kind'], meta: MessageMeta) => Promise<boolean>;
-const regionsText = (ids: string[], lang: Lang) => ids.map((r) => (lang === 'ar' ? regionLabelIn(r, 'ar') : regionLabel(r))).join(lang === 'ar' ? ' و' : ', ');
+/** a doctor's question chosen from the list, in the screen's language (a typed question stays as written) */
+const qText = (q: string, qAr: string | undefined, lang: Lang) => (lang === 'ar' ? qAr ?? q : lang === 'en' ? q : translateTo(q, lang) ?? q);
+const regionsText = (ids: string[], lang: Lang) => ids.map((r) => (lang === 'en' ? regionLabel(r) : regionLabelIn(r, lang))).join(lang === 'ar' ? ' و' : listSep(lang));
 const QUESTIONS: { en: string; ar: string }[] = [
   { en: 'Does it hurt here?', ar: 'بيوجعك هنا؟' },
   { en: 'Do you feel numbness or tingling here?', ar: 'حاسس بتنميل هنا؟' },
@@ -37,7 +40,7 @@ export function ProbeComposer({ onSend }: { onSend: (body: string, meta: Message
       <BodySelector selected={regions} onChange={(ids) => setRegions(ids.slice(-3))} />
       <div className="field"><label htmlFor="probe-q">{tr('Question', 'السؤال', lang)}</label>
         <select id="probe-q" className="input" value={q} onChange={(e) => setQ(Number(e.target.value))} data-testid="probe-question">
-          {QUESTIONS.map((x, k) => <option key={k} value={k}>{lang === 'ar' ? x.ar : x.en}</option>)}
+          {QUESTIONS.map((x, k) => <option key={k} value={k}>{pick(x, lang)}</option>)}
         </select></div>
       <label className="row small" style={{ gap: 8 }}><input type="checkbox" checked={askStrength} onChange={(e) => setAskStrength(e.target.checked)} /> {tr('If yes, ask how strong (0–10)', 'لو أيوه، اسأل عن الشدة (٠–١٠)', lang)}</label>
       <Button disabled={!regions.length} data-testid="probe-send"
@@ -55,7 +58,7 @@ export function ProbeRequestBubble({ m, answer, isDoctor }: { m: Message; answer
   return (
     <div className={`bubble ${isDoctor ? 'me' : 'them'} question`} data-kind="body_probe" data-testid="probe-bubble">
       <b className="bubble-tag"><LuCrosshair aria-hidden /> {tr('Here?', 'هنا؟', lang)} · {regionsText(p.regions, lang)}</b>
-      <span data-no-tr>{lang === 'ar' && qAr ? qAr : p.question}</span>
+      <span data-no-tr>{qText(p.question, qAr, lang)}</span>
       <span className="meta">{a ? tr('Answered', 'اتجاوب', lang) : tr('Waiting for the answer', 'مستني الرد', lang)} · {fmtDate(m.createdAt)}</span>
     </div>
   );
@@ -67,7 +70,7 @@ export function ProbeAnswerBubble({ m, isDoctor }: { m: Message; isDoctor: boole
   return (
     <div className={`card flat ${a.answer === 'yes' && (a.strength ?? 0) >= 7 ? 'cie-warn warn' : ''}`} style={{ gap: 6 }} data-kind="body_probe_answer" data-testid="probe-answer">
       <b className="bubble-tag">{isDoctor ? tr('Answer · approved by the patient', 'الرد · وافق عليه المريض', lang) : tr('Your answer', 'ردك', lang)}</b>
-      <div data-no-tr><b>{regionsText(a.regions, lang)}</b>: {lang === 'ar' ? ANS[a.answer].ar : ANS[a.answer].en}{a.strength !== null ? ` · ${a.strength}/10` : ''}</div>
+      <div data-no-tr><b>{regionsText(a.regions, lang)}</b>: {pick(ANS[a.answer], lang)}{a.strength !== null ? ` · ${a.strength}/10` : ''}</div>
       <span className="meta">{tr('via', 'عن طريق', lang)} {a.via} · {fmtDate(m.createdAt)}</span>
     </div>
   );
@@ -78,7 +81,7 @@ export function ProbeAnswerFlow({ request, onSend }: { request: Message; onSend:
   const lang = useLang();
   const p = request.meta!.probe!;
   const qAr = QUESTIONS.find((x) => x.en === p.question)?.ar;
-  const question = lang === 'ar' && qAr ? qAr : p.question;
+  const question = qText(p.question, qAr, lang);
   const [answer, setAnswer] = useState<ProbeAnswer['answer'] | null>(null);
   const [strength, setStrength] = useState<number | null>(null);
   const [via, setVia] = useState('buttons');
@@ -105,7 +108,7 @@ export function ProbeAnswerFlow({ request, onSend }: { request: Message; onSend:
         {ttsSupported() && <button className="iconbtn" onClick={() => speak(`${regionsText(p.regions, lang)}. ${question}`)} aria-label={tr('Read aloud', 'اقرا بصوت', lang)}><LuVolume2 /></button>}</div>
       <BodySelector selected={p.regions} readOnly focus={p.regions[0]} />
       <div className="grid2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-        {(['yes', 'no', 'not_sure'] as const).map((k) => <button key={k} className={`choice yesno${k === 'yes' ? ' yes' : ''}`} aria-pressed={answer === k} data-option={`probe:${k}`} onClick={() => { setAnswer(k); setVia('buttons'); if (k !== 'yes') setStrength(null); }}>{lang === 'ar' ? ANS[k].ar : ANS[k].en}</button>)}
+        {(['yes', 'no', 'not_sure'] as const).map((k) => <button key={k} className={`choice yesno${k === 'yes' ? ' yes' : ''}`} aria-pressed={answer === k} data-option={`probe:${k}`} onClick={() => { setAnswer(k); setVia('buttons'); if (k !== 'yes') setStrength(null); }}>{pick(ANS[k], lang)}</button>)}
       </div>
       {needStrength && (
         <div className="stack" style={{ gap: 6 }}>
@@ -114,7 +117,7 @@ export function ProbeAnswerFlow({ request, onSend }: { request: Message; onSend:
         </div>
       )}
       {sttSupported() && <Button variant="secondary" onClick={voice} disabled={listening}>{listening ? <><LuMicOff aria-hidden /> {tr('Listening…', 'بسمعك…', lang)}</> : <><LuMic aria-hidden /> {tr('Answer by voice (e.g. “yes, 6”)', 'رد بصوتك (مثلًا "أيوه، ٦")', lang)}</>}</Button>}
-      {ready && <div className="pre" data-testid="probe-review" data-no-tr>{regionsText(p.regions, lang)}: {lang === 'ar' ? ANS[answer!].ar : ANS[answer!].en}{strength !== null && answer === 'yes' ? ` · ${strength}/10` : ''}</div>}
+      {ready && <div className="pre" data-testid="probe-review" data-no-tr>{regionsText(p.regions, lang)}: {pick(ANS[answer!], lang)}{strength !== null && answer === 'yes' ? ` · ${strength}/10` : ''}</div>}
       <Button big disabled={!ready} data-testid="probe-approve" onClick={() => onSend(`${p.question} ${ANS[answer!].en}${strength !== null && answer === 'yes' ? `, ${strength}/10` : ''}`, 'body_probe_answer',
         { probeAnswer: { replyTo: request.id, answer: answer!, strength: answer === 'yes' ? strength : null, regions: p.regions, via, approvedByPatient: true } })}>
         <LuCircleCheck aria-hidden /> {tr('Send my answer', 'ابعت ردي', lang)}</Button>
@@ -125,7 +128,7 @@ export function ProbeAnswerFlow({ request, onSend }: { request: Message; onSend:
 // ---------------------------------------------------------------- teach-back
 const ST_LABEL = { understood: { en: 'Understood', ar: 'فاهمها' }, different: { en: 'Different from your doctor’s plan', ar: 'مختلف عن خطة دكتورك' }, missing: { en: 'Not mentioned', ar: 'ماتكلمتش عنها' } };
 const POINT_AR: Record<string, string> = { 'Which medicine': 'اسم الدوا', 'When to get urgent help': 'إمتى تطلب مساعدة عاجلة', 'How much each time': 'الجرعة كل مرة', 'How often': 'كام مرة في اليوم', 'For how long': 'لمدة قد إيه' };
-const pointLabel = (p: TBPoint, lang: Lang) => (lang !== 'ar' ? p.label : POINT_AR[p.label] ?? p.label.replace(': how much each time', ': الجرعة كل مرة').replace(': how often', ': كام مرة في اليوم').replace(': for how long', ': لمدة قد إيه'));
+const pointLabel = (p: TBPoint, lang: Lang) => (lang === 'en' ? p.label : lang !== 'ar' ? translateTo(p.label, lang) ?? p.label : POINT_AR[p.label] ?? p.label.replace(': how much each time', ': الجرعة كل مرة').replace(': how often', ': كام مرة في اليوم').replace(': for how long', ': لمدة قد إيه'));
 
 export function TeachBackFlow({ msgs, onSend }: { msgs: Message[]; onSend: Send }) {
   const { ai, prefs } = useApp();
@@ -146,7 +149,7 @@ export function TeachBackFlow({ msgs, onSend }: { msgs: Message[]; onSend: Send 
     setMicErr(''); setListening(true);
     const r = await listener.listen(lang, 15000);
     setListening(false);
-    if ('error' in r) { if (r.error !== 'aborted') setMicErr(ERROR_TEXT[r.error][lang === 'ar' ? 'ar' : 'en']); return; }
+    if ('error' in r) { if (r.error !== 'aborted') setMicErr(errText(r.error, lang)); return; }
     setText((t) => (t ? `${t} ${r.text}` : r.text)); setVia('voice');
   };
   const check = async () => { setBusy(true); try { setRes(await checkTeachBack(text, points, lang, aiOn ? (p) => ai.converse(p) : null)); } finally { setBusy(false); } };

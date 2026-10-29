@@ -175,7 +175,7 @@ test('Patient ID, recovery code and blind preferences', () => {
   assert.match(code, /^[2-9A-HJKMNP-Z]{4}(-[2-9A-HJKMNP-Z]{4}){3}$/);
   assert.equal(normalizeRecoveryCode(code.toLowerCase().replace(/-/g, ' ')), code);
   const b = cleanBlindPrefs({ lang: 'ar', rate: 9, navigation: 'weird', gestures: { swipeLeft: 'activate', swipeRight: 'bogus' }, recording: 'x' })!;
-  assert.equal(b.lang, 'ar'); assert.equal(cleanBlindPrefs({ lang: 'fr' })!.lang, 'en'); assert.equal(b.rate, 1.6); assert.equal(b.navigation, 'gestures');
+  assert.equal(b.lang, 'ar'); assert.equal(cleanBlindPrefs({ lang: 'fr' })!.lang, 'fr'); assert.equal(cleanBlindPrefs({ lang: 'de' })!.lang, 'en'); assert.equal(b.rate, 1.6); assert.equal(b.navigation, 'gestures');
   assert.equal(b.gestures.swipeLeft, 'activate'); assert.equal(b.gestures.swipeRight, 'next'); assert.ok(!('recording' in b));
   assert.deepEqual(cleanPreferences({ blind: DEFAULT_BLIND } as never).blind, DEFAULT_BLIND);
   assert.equal(cleanPreferences({}).blind, undefined);

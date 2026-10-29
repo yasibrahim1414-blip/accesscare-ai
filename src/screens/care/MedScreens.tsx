@@ -1,5 +1,6 @@
 // Patient: "My care" hub, medicines (schedule from the doctor's prescriptions,
 // dose check-ins, reminders, 7-day adherence) and the medicine-box check.
+import { dateLocale } from '../../i18n/lang';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   LuPill, LuScanLine, LuCamera, LuSiren, LuLanguages, LuHeartHandshake, LuChevronRight, LuBell, LuBellOff, LuCircleCheck,
@@ -14,7 +15,7 @@ import {
   type MedPlan, type Slot,
 } from '../../services/care/meds';
 import { boxPrompt, checkBox, cleanBoxReading, shrinkForReading, type BoxVerdict } from '../../services/care/boxReader';
-import { Listener, sttSupported, ERROR_TEXT } from '../../services/voice/Speech';
+import { Listener, sttSupported, errText } from '../../services/voice/Speech';
 import { EmergencyContent } from '../shared/Emergency';
 import { AIStatus } from '../shared/AIStatus';
 import { CameraCapture } from './CameraCapture';
@@ -52,7 +53,7 @@ export function PatientCare() {
     { r: 'p.boxcheck', Icon: LuScanLine, t: L('Check a medicine box', 'اتأكد من علبة الدوا'), d: L('Point the camera; hear if it’s yours', 'وجّه الكاميرا واسمع لو هو دواك'), tone: 'saffron' },
     { r: 'p.photos', Icon: LuCamera, t: L('Wound & skin photos', 'صور الجرح والجلد'), d: L('A dated timeline for your doctor', 'صور بالتاريخ لدكتورك'), tone: 'blue' },
     { r: 'p.card', Icon: LuSiren, t: L('Emergency card', 'كارت الطوارئ'), d: L('Allergies, medicines, contact — as a QR', 'الحساسية والأدوية ورقم الطوارئ — بكود QR'), tone: 'red' },
-    { r: 'interp', Icon: LuLanguages, t: L('Visit interpreter', 'مترجم الزيارة'), d: L('Arabic ⇄ English, live in the clinic', 'عربي ⇄ إنجليزي في العيادة'), tone: 'violet' },
+    { r: 'interp', Icon: LuLanguages, t: L('Visit interpreter', 'مترجم الزيارة'), d: L('Between two languages, live in the clinic', 'بين لغتين، مباشرة في العيادة'), tone: 'violet' },
     { r: 'p.caregivers', Icon: LuHeartHandshake, t: L('Caregivers', 'المرافقين'), d: L('Let family help, with your permission', 'خلي حد من أهلك يساعد بإذنك'), tone: 'green' },
   ] as const;
   return (
@@ -176,7 +177,7 @@ export function MedicinesScreen() {
                 <div className="adh-bars" role="img" aria-label={adh.days.map((d) => `${d.day}: ${d.taken}/${d.planned}`).join(', ')}>
                   {adh.days.map((d) => (
                     <div key={d.day} className="adh-day"><div className="adh-col"><span style={{ height: `${d.planned ? Math.max(6, (d.taken / d.planned) * 100) : 0}%` }} className={d.planned && d.taken < d.planned ? 'part' : ''} /></div>
-                      <span className="tiny muted" data-no-tr>{new Date(`${d.day}T12:00`).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'narrow' })}</span></div>
+                      <span className="tiny muted" data-no-tr>{new Date(`${d.day}T12:00`).toLocaleDateString(dateLocale(lang), { weekday: 'narrow' })}</span></div>
                   ))}
                 </div>
                 {adh.sideEffectNotes.length > 0 && <div className="stack" style={{ marginTop: 8 }}>{adh.sideEffectNotes.map((n, i) => <p key={i} className="small warn-text" data-no-tr><LuTriangleAlert aria-hidden /> {n.medicine}: “{n.text}”</p>)}</div>}
@@ -196,7 +197,7 @@ export function MedicinesScreen() {
                     <div className="row wrap" style={{ alignItems: 'center' }}><LuClock aria-hidden /> <span className="small" data-no-tr>{p.times.join(' · ')}</span>
                       <button className="linkbtn small" onClick={() => setEditing(p)} data-testid="med-times">{L('Change times', 'غيّر المواعيد')}</button></div>
                   ) : <p className="small warn-text">{L('How often was not clear in the prescription — ask your doctor.', 'عدد المرات مش واضح في الروشتة — اسأل دكتورك.')} <button className="linkbtn" onClick={() => setEditing(p)}>{L('Set times', 'حدد مواعيد')}</button></p>)}
-                  {p.endDay && <p className="tiny muted">{p.active ? L('Until', 'لحد') : L('Ended', 'خلص')} <span data-no-tr>{new Date(`${p.endDay}T12:00`).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short' })}</span></p>}
+                  {p.endDay && <p className="tiny muted">{p.active ? L('Until', 'لحد') : L('Ended', 'خلص')} <span data-no-tr>{new Date(`${p.endDay}T12:00`).toLocaleDateString(dateLocale(lang), { day: 'numeric', month: 'short' })}</span></p>}
                   {ttsSupported() && <button className="linkbtn small" onClick={() => speak(`${p.name} ${p.dose}. ${p.frequency}. ${p.duration}. ${p.instructions}`)}><LuVolume2 aria-hidden /> {L('Read aloud', 'اقراها بصوت')}</button>}
                 </div>
               ))}
@@ -236,7 +237,7 @@ function SideEffectSheet({ slot, onClose, onSaved }: { slot: Slot; onClose: () =
   const listen = async () => {
     setMicErr(''); setListening(true);
     const r = await listener.listen(lang, 15000); setListening(false);
-    if ('error' in r) { if (r.error !== 'aborted') setMicErr(ERROR_TEXT[r.error][lang === 'ar' ? 'ar' : 'en']); return; }
+    if ('error' in r) { if (r.error !== 'aborted') setMicErr(errText(r.error, lang)); return; }
     setText((t) => (t ? `${t} ${r.text}` : r.text)); setVia('voice');
   };
   const save = async () => { setBusy(true); try { await act(slot.plan, slot.slot, taken ? 'side_effect' : 'missed', { sideEffect: text.trim(), via, urgent }); } finally { setBusy(false); } };
@@ -287,7 +288,7 @@ function VoiceDoseCheckin({ slots, onDone }: { slots: Slot[]; onDone: () => void
   const go = async () => {
     setMsg(''); setListening(true);
     const r = await listener.listen(lang, 12000); setListening(false);
-    if ('error' in r) { if (r.error !== 'aborted') setMsg(ERROR_TEXT[r.error][lang === 'ar' ? 'ar' : 'en']); return; }
+    if ('error' in r) { if (r.error !== 'aborted') setMsg(errText(r.error, lang)); return; }
     const a = readDoseAnswer(r.text);
     if (!a) { setMsg(L(`I heard “${r.text}”. Say “I took it”, “I missed it”, or describe a side effect.`, `سمعت "${r.text}". قول "خدتها" أو "فاتتني" أو احكي العرض الجانبي.`)); return; }
     await act(target.plan, target.slot, a.status, { sideEffect: a.sideEffect, via: 'voice', urgent: a.sideEffect ? sideEffectUrgent(a.sideEffect) : [] });

@@ -1,5 +1,6 @@
 // Doctor: alerts from what patients shared, the pre-visit brief, and each
 // patient's medicine check-ins and photo timeline.
+import { dateLocale, pick } from '../../i18n/lang';
 import React, { useEffect, useState } from 'react';
 import { LuTriangleAlert, LuSparkles, LuPill, LuImages, LuBellRing, LuChevronRight, LuFileText } from 'react-icons/lu';
 import { useApp, useLoad } from '../../app/AppContext';
@@ -68,7 +69,7 @@ export function DoctorAlertsCard() {
         <div className="list">{list.slice(0, 6).map((a, i) => (
           <button key={i} className="list-item" onClick={() => nav.push({ name: 'd.progressOf', id: a.patientId })} data-testid="alert-row">
             <span className={`li-ico ${a.level === 'urgent' ? 'danger' : 'warn'}`}><LuTriangleAlert /></span>
-            <div className="grow"><b data-no-tr>{a.patientName}</b><div className={`small ${a.level === 'urgent' ? 'danger-text' : 'warn-text'}`} data-no-tr>{lang === 'ar' ? a.ar : a.en}</div></div>
+            <div className="grow"><b data-no-tr>{a.patientName}</b><div className={`small ${a.level === 'urgent' ? 'danger-text' : 'warn-text'}`} data-no-tr>{pick(a, lang)}</div></div>
             <LuChevronRight className="chev" aria-hidden />
           </button>
         ))}</div>
@@ -114,13 +115,13 @@ export function BriefPanel({ patientId, aiAllowed }: { patientId: string; aiAllo
         <section key={s.key} className={`card brief-sec sec-${s.key}`} data-testid={`brief-${s.key}`}>
           <h3 className="title">{s.key === 'urgent' && <LuTriangleAlert aria-hidden />} {L(s.en, s.ar)}</h3>
           <ul className="small">{s.lines.map((l) => (
-            <li key={l.id} className={l.level === 'urgent' ? 'danger-text' : l.level === 'attention' ? 'warn-text' : ''}><span data-no-tr>{lang === 'ar' ? l.ar : l.en}</span> <span className="ref-chips">{l.refs.map((r) => <span key={r} className="ref" title={src(r)?.en} data-no-tr>{r}</span>)}</span></li>
+            <li key={l.id} className={l.level === 'urgent' ? 'danger-text' : l.level === 'attention' ? 'warn-text' : ''}><span data-no-tr>{pick(l, lang)}</span> <span className="ref-chips">{l.refs.map((r) => <span key={r} className="ref" title={src(r)?.en} data-no-tr>{r}</span>)}</span></li>
           ))}</ul>
         </section>
       ))}
       {b.sources.length > 0 && (
         <details className="card"><summary className="small strong"><LuFileText aria-hidden /> {L('Sources', 'المصادر')}</summary>
-          <ul className="tiny">{b.sources.map((s) => <li key={s.ref}><b data-no-tr>{s.ref}</b> <span data-no-tr>{lang === 'ar' ? s.ar : s.en}</span></li>)}</ul></details>
+          <ul className="tiny">{b.sources.map((s) => <li key={s.ref}><b data-no-tr>{s.ref}</b> <span data-no-tr>{pick(s, lang)}</span></li>)}</ul></details>
       )}
       {b.sections.length > 0 && (aiAllowed
         ? <Button variant="secondary" onClick={run} busy={busy} data-testid="brief-ai-run"><LuSparkles aria-hidden /> {L('Condense with AI', 'لخّص بالذكاء الاصطناعي')}</Button>
@@ -164,7 +165,7 @@ export function PatientCareSection({ patientId }: { patientId: string }) {
               {rows.length > 1 ? <PhotoCompare first={rows[rows.length - 1]} last={rows[0]} lang={lang} /> : null}
               <div className="photo-strip">{rows.map((r) => (
                 <figure key={r.id} className="photo-thumb"><img src={r.data.image} alt={`${area} ${new Date(r.at).toLocaleDateString()}`} />
-                  <figcaption className="tiny"><span data-no-tr>{new Date(r.at).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short' })}</span>{r.data.note && <span className="muted" data-no-tr> · {r.data.note}</span>}</figcaption></figure>
+                  <figcaption className="tiny"><span data-no-tr>{new Date(r.at).toLocaleDateString(dateLocale(lang), { day: 'numeric', month: 'short' })}</span>{r.data.note && <span className="muted" data-no-tr> · {r.data.note}</span>}</figcaption></figure>
               ))}</div>
             </div>
           ))}

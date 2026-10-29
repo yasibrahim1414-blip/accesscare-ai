@@ -3,15 +3,17 @@
 // approves the wording before it is sent; the AI may not add anything.
 
 import { PROMPT_PREFIX } from './engine';
+import type { Lang } from '../../i18n/lang';
+import { AI_LANG } from '../langWords';
 
 const AR_DIGITS: Record<string, string> = { '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9' };
 const numbers = (t: string) => new Set((t.replace(/[٠-٩]/g, (d) => AR_DIGITS[d]).match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => n.replace(',', '.')));
 const REASSURE = /don'?t worry|nothing (serious|to worry)|you('| wi)ll be (fine|ok|okay)|harmless|متقلقش|ماتقلقش|مفيش حاجة خطيرة|مش خطير|هتبقى كويس|هتكون كويس/i;
 
-export function summaryPrompt(doctorText: string, rxLines: string[], lang: 'en' | 'ar' = 'en'): string {
+export function summaryPrompt(doctorText: string, rxLines: string[], lang: Lang = 'en'): string {
   return `${PROMPT_PREFIX}
 Task: rewrite the doctor's explanation of this visit so the patient can understand it. The patient may have trouble reading or understanding complex language.
-Language: ${lang === 'ar' ? 'Egyptian Arabic (colloquial, warm, respectful); keep medicine names in Latin letters as written' : 'plain English'}.
+Language: ${lang === 'ar' ? 'Egyptian Arabic (colloquial, warm, respectful); keep medicine names in Latin letters as written' : lang === 'en' ? 'plain English' : `${AI_LANG[lang]}; keep medicine names in Latin letters as written`}.
 Rules: short sentences (at most 12 words each), one idea per sentence; explain any medical word in simple words; keep EVERY instruction, number, medicine name, time and warning exactly; do NOT add any advice, diagnosis, medicine, number, test, reassurance or promise that is not in the doctor's text; do not remove warnings about when to get help. If something is unclear, keep the doctor's words.
 DOCTOR'S TEXT:
 ${doctorText.slice(0, 3000)}

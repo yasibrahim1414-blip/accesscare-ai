@@ -19,8 +19,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { LuMic, LuMicOff, LuRepeat, LuSquare, LuX, LuEar } from 'react-icons/lu';
 import { useApp, homeFor, type Route } from '../app/AppContext';
-import { useLang, setLang, getLang, tr, type Lang } from '../i18n/lang';
-import { Speaker, Listener, sttSupported, ttsAvailable, unlockAudio, ERROR_TEXT, type SpeechErr } from '../services/voice/Speech';
+import { useLang, setLang, getLang, tr, dateLocale, isRtl, listSep, type Lang } from '../i18n/lang';
+import { foldText, LANG_NAME } from '../services/langWords';
+import { Speaker, Listener, sttSupported, ttsAvailable, unlockAudio, errText, type SpeechErr } from '../services/voice/Speech';
 import { GestureRecognizer, TripleSwipeDetector, TripleTapDetector, type Gesture } from '../services/voice/Gestures';
 import { deviceBlind, setDeviceBlind, onDeviceBlind, defaultBlind, micChoice, setMicChoice } from '../screens/voice/blindMode';
 import type { BlindPrefs } from '../domain/voice';
@@ -33,13 +34,23 @@ import { loadMedData, shareCareDefault } from '../screens/care/careData';
 import { todaySlots } from '../services/care/meds';
 import { localDay } from '../domain/care';
 
-const DOSE_TAKEN = /\b(i )?(took|have taken|just took|taken)\b.{0,25}\b(medicine|medication|meds|pills?|tablets?|dose)\b|(خدت|اخدت|أخدت|شربت|بلعت)\s*(ال)?(دوا|دواء|علاج|حبايه|حباية|برشامه|برشامة|جرعه|جرعة)/i;
-const DOSE_MISSED = /\b(i )?(missed|forgot|did ?n[o']t take)\b.{0,25}\b(medicine|medication|meds|pills?|tablets?|dose)\b|(نسيت|فاتتني|ماخدتش|مخدتش)\s*(ال)?(دوا|دواء|علاج|حبايه|حباية|جرعه|جرعة)/i;
-const DOSE_ASK = /\b(what|which) (medicine|medication|pill)s? (now|today|next)\b|\b(read|tell me) my (medicines|medications|pills)\b|(ايه|إيه) (الدوا|الادويه|الأدوية) (دلوقتي|النهارده)|اقرالي (ادويتي|الأدوية|الادويه)|مواعيد الدوا/i;
+const F = (re: RegExp) => new RegExp(foldText(re.source), re.flags); // matched on folded text (French accents, Hindi spellings)
+const DOSE_TAKEN_RE = [/\b(i )?(took|have taken|just took|taken)\b.{0,25}\b(medicine|medication|meds|pills?|tablets?|dose)\b|(خدت|اخدت|أخدت|شربت|بلعت)\s*(ال)?(دوا|دواء|علاج|حبايه|حباية|برشامه|برشامة|جرعه|جرعة)/i,
+  F(/(j'?\s*ai pris|je viens de prendre)\s+(mon |mes |le |la |les |ma )?(medicament|traitement|comprimes?|cachets?|pilules?|dose)/i),
+  /(دوا|دوائی|گولی|خوراک)\s*(لے لی|لی ہے|کھا لی|لی)(\s|$|۔)/, F(/(दवा|दवाई|गोली|खुराक)\s*(ले ली|ली है|खा ली|ली)(\s|$|।)/)];
+const DOSE_MISSED_RE = [/\b(i )?(missed|forgot|did ?n[o']t take)\b.{0,25}\b(medicine|medication|meds|pills?|tablets?|dose)\b|(نسيت|فاتتني|ماخدتش|مخدتش)\s*(ال)?(دوا|دواء|علاج|حبايه|حباية|جرعه|جرعة)/i,
+  F(/(j'?\s*ai oublie|oublie|pas pris|n'?\s*ai pas pris|rate)\s+(de prendre\s+)?(mon |mes |le |la |les |ma )?(medicament|traitement|comprimes?|cachets?|pilules?|dose)/i),
+  /(دوا|دوائی|گولی|خوراک)\s*(لینا بھول|بھول گیا|بھول گئی|نہیں لی|رہ گئی)/, F(/(दवा|दवाई|गोली|खुराक)\s*(लेना भूल|भूल गया|भूल गई|नहीं ली|छूट गई)/)];
+const DOSE_ASK_RE = [/\b(what|which) (medicine|medication|pill)s? (now|today|next)\b|\b(read|tell me) my (medicines|medications|pills)\b|(ايه|إيه) (الدوا|الادويه|الأدوية) (دلوقتي|النهارده)|اقرالي (ادويتي|الأدوية|الادويه)|مواعيد الدوا/i,
+  F(/quels? medicaments? (maintenant|aujourd'?\s*hui)|lis moi mes medicaments|mes medicaments (d'?\s*)?aujourd'?\s*hui/i),
+  /(آج|ابھی)\s*(کون سی|کونسی)\s*دوا|میری دوائیں (بتاؤ|پڑھو)/, F(/(आज|अभी)\s*(कौन सी|कौनसी)\s*दवा|मेरी दवाइयां (बताओ|पढ़ो)/)];
+const tests = (list: RegExp[]) => ({ test: (t: string) => { const f = foldText(t.toLowerCase()).replace(/[-–]/g, ' '); return list.some((re) => re.test(t) || re.test(f)); } });
+const DOSE_TAKEN = tests(DOSE_TAKEN_RE), DOSE_MISSED = tests(DOSE_MISSED_RE), DOSE_ASK = tests(DOSE_ASK_RE);
 
 const SYMPTOM_FORMS = [...CONCEPTS.flatMap((c) => c.words), ...BODY.flatMap((b) => b.words),
   'pain', 'hurt', 'hurts', 'hurting', 'ache', 'aching', 'sick', 'ill', 'not well', 'unwell', 'tired', 'dizzy', 'fever', 'cough', 'vomit', 'nausea', 'bleeding', 'swollen', 'itchy', 'burning',
-  'وجع', 'بيوجعني', 'بتوجعني', 'وجعاني', 'الم', 'تعبان', 'تعبانه', 'عيان', 'عيانه', 'دايخ', 'دوخه', 'سخن', 'سخونيه', 'حراره', 'كحه', 'ترجيع', 'رجعت', 'نزيف', 'ورم', 'هرش', 'حرقان', 'مصدع'];
+  'وجع', 'بيوجعني', 'بتوجعني', 'وجعاني', 'الم', 'تعبان', 'تعبانه', 'عيان', 'عيانه', 'دايخ', 'دوخه', 'سخن', 'سخونيه', 'حراره', 'كحه', 'ترجيع', 'رجعت', 'نزيف', 'ورم', 'هرش', 'حرقان', 'مصدع',
+  'mal', "j'ai mal", 'douleur', 'malade', 'fatigué', 'saigne', 'درد', 'تکلیف', 'بیمار', 'بخار', 'خون', 'दर्द', 'तकलीफ', 'बीमार', 'बुखार', 'खून'];
 /** Words that describe how the person feels (a symptom), not a command. */
 export const soundsLikeSymptom = (text: string) => hasAny(text, SYMPTOM_FORMS);
 
@@ -123,7 +134,7 @@ export function BlindProvider({ children }: { children: React.ReactNode }) {
     setSpoken(text.join(' '));
     const live = liveRegion(); live.textContent = ''; window.setTimeout(() => { live.textContent = text.join(' '); }, 30);
     const p = R.current.prefs ?? defaultBlind();
-    await speaker.speak(text, { lang: R.current.lang, rate: p.rate, voiceAr: p.voiceAr, voiceEn: p.voiceEn, engine: p.engine });
+    await speaker.speak(text, { lang: R.current.lang, rate: p.rate, voiceAr: p.voiceAr, voiceEn: p.voiceEn, voices: p.voices, engine: p.engine });
   }, [speaker, listener]);
 
   const savePrefs = useCallback((patch: Partial<BlindPrefs>) => {
@@ -141,10 +152,13 @@ export function BlindProvider({ children }: { children: React.ReactNode }) {
     const pages = navItems().map((i) => i.name);
     const title = screenTitle();
     const head = L(`You are on ${title}.`, `إنت في صفحة ${title}.`);
-    const list = names.length ? L(`On this screen you can choose: ${names.join(', ')}${its.length > 10 ? `, and ${its.length - 10} more` : ''}.`, `في الصفحة دي تقدر تختار: ${names.join('، ')}${its.length > 10 ? `، و${its.length - 10} كمان` : ''}.`) : L('There are no buttons on this screen.', 'مفيش زراير في الصفحة دي.');
+    const sep = listSep(R.current.lang);
+    const list = names.length ? (its.length > 10
+      ? tr('On this screen you can choose: {list}, and {n} more.', 'في الصفحة دي تقدر تختار: {list}، و{n} كمان.', R.current.lang, { list: names.join(sep), n: its.length - 10 })
+      : tr('On this screen you can choose: {list}.', 'في الصفحة دي تقدر تختار: {list}.', R.current.lang, { list: names.join(sep) })) : L('There are no buttons on this screen.', 'مفيش زراير في الصفحة دي.');
     const how = L('Say the name of what you want, or say: go back, read the page, help me fill the form, open settings, repeat, stop, or exit Blind Mode. Three quick swipes to the right also turn Blind Mode off.',
       'قول اسم اللي عايزه، أو قول: ارجع، اقرا الصفحة، ساعدني أملى الفورم، افتح الإعدادات، كرر، اسكت، أو اقفل الوضع الصوتي. وتلت سحبات سريعة لليمين بتقفل الوضع الصوتي.');
-    const nav = pages.length ? L(`Pages: ${pages.join(', ')}.`, `الصفحات: ${pages.join('، ')}.`) : '';
+    const nav = pages.length ? tr('Pages: {list}.', 'الصفحات: {list}.', R.current.lang, { list: pages.join(listSep(R.current.lang)) }) : '';
     return [head, list, nav, how].filter(Boolean);
   };
   const pageLines = (): string[] => {
@@ -163,7 +177,7 @@ export function BlindProvider({ children }: { children: React.ReactNode }) {
       return [pending.current.question];
     }
     await doClick(it.el);
-    if (it.role === 'checkbox') return [L(`${it.name}: ${(it.el as HTMLInputElement).checked ? 'checked' : 'not checked'}.`, `${it.name}: ${(it.el as HTMLInputElement).checked ? 'متعلّم عليه' : 'مش متعلّم عليه'}.`)];
+    if (it.role === 'checkbox') return [`${it.name}: ${(it.el as HTMLInputElement).checked ? L('checked', 'متعلّم عليه') : L('not checked', 'مش متعلّم عليه')}.`];
     return [L(`Pressed ${it.name}.`, `دوست على ${it.name}.`)];
   };
   const doClick = async (el: HTMLElement) => { el.focus({ preventScroll: false }); el.click(); await new Promise((r) => setTimeout(r, 350)); };
@@ -179,8 +193,8 @@ export function BlindProvider({ children }: { children: React.ReactNode }) {
     return []; // the new screen is announced when it opens
   };
 
-  const statusName = (s: string) => (R.current.lang === 'ar' ? STATUS_AR[s] ?? s : STATUS_LABELS[s as keyof typeof STATUS_LABELS] ?? s);
-  const when = (iso: string) => new Date(iso).toLocaleString(R.current.lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' });
+  const statusName = (s: string) => { const en = STATUS_LABELS[s as keyof typeof STATUS_LABELS] ?? s; return tr(en, STATUS_AR[s] ?? en, R.current.lang); };
+  const when = (iso: string) => new Date(iso).toLocaleString(dateLocale(R.current.lang), { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' });
 
   const readLatestReport = async (): Promise<string[]> => {
     const m = R.current.me;
@@ -225,7 +239,7 @@ export function BlindProvider({ children }: { children: React.ReactNode }) {
     if (it.role === 'checkbox' || it.role === 'radio') return [describe(it, R.current.lang), L('Say yes to check it, no to leave it, or skip.', 'قول أيوه علشان أعلّم عليه، أو لأ، أو تخطي.')];
     if (it.role === 'select') {
       const opts = Array.from((el as HTMLSelectElement).options).map((o) => o.text.trim()).filter(Boolean).slice(0, 8);
-      return [describe(it, R.current.lang), L(`Choices: ${opts.join(', ')}. Say one, or skip.`, `الاختيارات: ${opts.join('، ')}. قول واحد منهم، أو تخطي.`)];
+      return [describe(it, R.current.lang), tr('Choices: {list}. Say one, or skip.', 'الاختيارات: {list}. قول واحد منهم، أو تخطي.', R.current.lang, { list: opts.join(listSep(R.current.lang)) })];
     }
     return [describe(it, R.current.lang), L('Say what to write, or say skip.', 'قول أكتب إيه، أو قول تخطي.')];
   };
@@ -241,10 +255,10 @@ export function BlindProvider({ children }: { children: React.ReactNode }) {
       if ((el as HTMLInputElement).checked !== want) el.click();
       f.i++; return formStep();
     }
-    const value = /email/i.test(it.name + (el as HTMLInputElement).type) ? text.replace(/\s+at\s+/gi, '@').replace(/\s+dot\s+/gi, '.').replace(/\s+/g, '').toLowerCase() : text;
+    const value = /email/i.test(it.name + (el as HTMLInputElement).type) ? text.replace(/\s+(at|arobase|ایٹ|एट)\s+/gi, '@').replace(/\s+(dot|point|ڈاٹ|डॉट)\s+/gi, '.').replace(/\s+/g, '').toLowerCase() : text;
     if (!setFieldValue(el, value)) return [L('I could not set that choice. Please say one of the choices, or skip.', 'مقدرتش أختار ده. قول اختيار من الموجودين، أو تخطي.')];
     f.i++;
-    return [L(`${it.name}: ${value}.`, `${it.name}: ${value}.`), ...formStep()];
+    return [`${it.name}: ${value}.`, ...formStep()];
   };
 
   const aiInterpret = async (text: string): Promise<string[] | null> => {
@@ -254,17 +268,17 @@ export function BlindProvider({ children }: { children: React.ReactNode }) {
 Screen: ${JSON.stringify(screenTitle().slice(0, 80))}
 Controls on this screen (index: name): ${JSON.stringify(its.map((i, k) => `${k}: ${i.name.slice(0, 60)} (${i.role})`))}
 Pages that can be opened: ${JSON.stringify(['home', 'profile', 'settings', 'history', 'doctor', 'patients', 'consultations', 'signal', 'camera', 'about'])}
-Other actions: back, help, read_page, read_form, fill_form, read_latest_report, read_doctor_reply, new_report, logout, exit_blind_mode, language_ar, language_en, none.
-Person said (${R.current.lang === 'ar' ? 'Arabic' : 'English'}): ${JSON.stringify(text.slice(0, 300))}
+Other actions: back, help, read_page, read_form, fill_form, read_latest_report, read_doctor_reply, new_report, logout, exit_blind_mode, language_en, language_ar, language_fr, language_ur, language_hi, none.
+Person said (${LANG_NAME[R.current.lang] ?? 'English'}): ${JSON.stringify(text.slice(0, 300))}
 Never give medical advice or diagnosis. If the request is unclear, choose "clarify" with a short question.
-Reply with only JSON: {"action":"press"|"open"|"back"|"help"|"read_page"|"read_form"|"fill_form"|"read_latest_report"|"read_doctor_reply"|"new_report"|"logout"|"exit_blind_mode"|"language_ar"|"language_en"|"clarify"|"none","target":<control index or page name or null>,"reply":"<one short sentence in ${R.current.lang === 'ar' ? 'Egyptian Arabic' : 'English'}>"}`;
+Reply with only JSON: {"action":"press"|"open"|"back"|"help"|"read_page"|"read_form"|"fill_form"|"read_latest_report"|"read_doctor_reply"|"new_report"|"logout"|"exit_blind_mode"|"language_en"|"language_ar"|"language_fr"|"language_ur"|"language_hi"|"clarify"|"none","target":<control index or page name or null>,"reply":"<one short sentence in ${R.current.lang === 'ar' ? 'Egyptian Arabic' : R.current.lang === 'ur' ? 'Urdu (Urdu script)' : R.current.lang === 'hi' ? 'Hindi (Devanagari script)' : LANG_NAME[R.current.lang] ?? 'English'}>"}`;
     setStatus('thinking');
     const raw = await Promise.race([ai.voiceCommand(prompt), new Promise<null>((r) => setTimeout(() => r(null), 12000))]);
     setStatus('idle');
     if (!raw || typeof raw !== 'object') return null;
     const j = raw as { action?: string; target?: unknown; reply?: unknown };
     const reply = typeof j.reply === 'string' ? j.reply.replace(/\s+/g, ' ').slice(0, 200) : '';
-    const map: Record<string, Cmd> = { back: { type: 'back' }, help: { type: 'help' }, read_page: { type: 'read_page' }, read_form: { type: 'read_form' }, fill_form: { type: 'fill_form' }, read_latest_report: { type: 'read_latest_report' }, read_doctor_reply: { type: 'read_doctor_reply' }, new_report: { type: 'new_report' }, logout: { type: 'logout' }, exit_blind_mode: { type: 'exit' }, language_ar: { type: 'lang', lang: 'ar' }, language_en: { type: 'lang', lang: 'en' } };
+    const map: Record<string, Cmd> = { back: { type: 'back' }, help: { type: 'help' }, read_page: { type: 'read_page' }, read_form: { type: 'read_form' }, fill_form: { type: 'fill_form' }, read_latest_report: { type: 'read_latest_report' }, read_doctor_reply: { type: 'read_doctor_reply' }, new_report: { type: 'new_report' }, logout: { type: 'logout' }, exit_blind_mode: { type: 'exit' }, language_ar: { type: 'lang', lang: 'ar' }, language_en: { type: 'lang', lang: 'en' }, language_fr: { type: 'lang', lang: 'fr' }, language_ur: { type: 'lang', lang: 'ur' }, language_hi: { type: 'lang', lang: 'hi' } };
     if (j.action === 'press' && typeof j.target === 'number' && its[j.target]) return press(its[j.target]);
     if (j.action === 'open' && typeof j.target === 'string') return run({ type: 'go', to: j.target as NavTarget }, text);
     if (j.action && map[j.action]) return run(map[j.action], text);
@@ -306,7 +320,7 @@ Reply with only JSON: {"action":"press"|"open"|"back"|"help"|"read_page"|"read_f
       case 'read_form': {
         const f = fieldsOf();
         if (!f.length) return [L('There is no form on this screen.', 'مفيش فورم في الصفحة دي.')];
-        return [L(`This form has ${f.length} field${f.length > 1 ? 's' : ''}:`, `الفورم فيه ${f.length} خانات:`), ...f.map((i) => describe(i, R.current.lang) + '.')];
+        return [f.length > 1 ? tr('This form has {n} fields:', 'الفورم فيه {n} خانات:', R.current.lang, { n: f.length }) : L('This form has 1 field:', 'الفورم فيه خانة واحدة:'), ...f.map((i) => describe(i, R.current.lang) + '.')];
       }
       case 'fill_form': {
         const f = fieldsOf().filter((i) => !i.disabled);
@@ -338,9 +352,9 @@ Reply with only JSON: {"action":"press"|"open"|"back"|"help"|"read_page"|"read_f
         } };
         return [pending.current.question];
       case 'lang':
-        if (cmd.lang === getLang()) return [cmd.lang === 'ar' ? 'التطبيق بالعربي بالفعل.' : 'The app is already in English.'];
+        if (cmd.lang === getLang()) return [tr('The app is already in English.', 'التطبيق بالعربي بالفعل.', cmd.lang)];
         setLang(cmd.lang); R.current.lang = cmd.lang;
-        return [cmd.lang === 'ar' ? 'تمام، التطبيق بقى بالعربي. اتكلم معايا بالعربي.' : 'Okay, the app is now in English. Talk to me in English.'];
+        return [tr('Okay, the app is now in English. Talk to me in English.', 'تمام، التطبيق بقى بالعربي. اتكلم معايا بالعربي.', cmd.lang)];
       case 'press': {
         const its = items();
         const m = bestMatch(cmd.name, its);
@@ -355,7 +369,7 @@ Reply with only JSON: {"action":"press"|"open"|"back"|"help"|"read_page"|"read_f
         if (!m || m.score < 0.6) return [L(`I could not find a field called ${cmd.field}.`, `ملقيتش خانة اسمها ${cmd.field}.`)];
         if (m.item.secret) return [L('For your privacy, passwords are not taken by voice. Please type it.', 'علشان خصوصيتك، مش باخد كلمات السر بالصوت. اكتبها من فضلك.')];
         setFieldValue(m.item.el, cmd.value);
-        return [L(`${m.item.name}: ${cmd.value}.`, `${m.item.name}: ${cmd.value}.`)];
+        return [`${m.item.name}: ${cmd.value}.`];
       }
       case 'next_item': case 'previous_item': return moveCursor(cmd.type === 'next_item' ? 1 : -1);
       case 'activate': {
@@ -404,7 +418,7 @@ Reply with only JSON: {"action":"press"|"open"|"back"|"help"|"read_page"|"read_f
     setHeard(text);
     const cmd = interpret(text);
     let out: string[] = [];
-    const aiOnOff = /\b(turn|switch|put)\s+(on|off)\s+(the\s+)?ai\b|\bai\s+(on|off)\b|\b(enable|disable)\s+(the\s+)?ai\b|(شغل|شغّل|افتح|اقفل|وقف|طفي|اطفي)\s*(ال)?(ذكاء|الذكاء)/i.exec(text);
+    const aiOnOff = /\b(turn|switch|put)\s+(on|off)\s+(the\s+)?ai\b|\bai\s+(on|off)\b|\b(enable|disable)\s+(the\s+)?ai\b|(شغل|شغّل|افتح|اقفل|وقف|طفي|اطفي)\s*(ال)?(ذكاء|الذكاء)|\b(active|activer|desactive|desactiver|allume|eteins)\s+(l'?\s*|la\s+)?(ia|intelligence artificielle)\b|(اے آئی|مصنوعی ذہانت)\s*(چالو|بند|آن|آف)|(एआई|कृत्रिम बुद्धिमत्ता)\s*(चालू|बंद|ऑन|ऑफ)/i.exec(foldText(text));
     if ((DOSE_TAKEN.test(text) || DOSE_MISSED.test(text) || DOSE_ASK.test(text)) && R.current.me?.profile.role === 'patient' && !pending.current) {
       setHeard(text);
       try {
@@ -426,7 +440,7 @@ Reply with only JSON: {"action":"press"|"open"|"back"|"help"|"read_page"|"read_f
       say(out); return;
     }
     if (aiOnOff && R.current.me?.profile.role === 'patient' && !pending.current) {
-      const on = !/(off|disable|اقفل|وقف|طفي|اطفي)/i.test(text);
+      const on = !/(off|disable|اقفل|وقف|طفي|اطفي|desactiv|eteins|بند|آف|बंद|ऑफ)/i.test(foldText(text));
       const m = R.current.me;
       try { const saved = await app.backend.savePreferences({ ...m.preferences, aiAssist: on }); app.setMe({ ...m, preferences: saved });
         out = [on ? L('AI assistance is on. Claude will help understand your words; you still confirm everything.', 'مساعدة الذكاء الاصطناعي اشتغلت. Claude هيساعد يفهم كلامك، وإنت بتأكد كل حاجة.') : L('AI assistance is off.', 'مساعدة الذكاء الاصطناعي اتقفلت.')];
@@ -469,7 +483,7 @@ Reply with only JSON: {"action":"press"|"open"|"back"|"help"|"read_page"|"read_f
           continue;
         }
         setMicErr(res.error); setStatus('error');
-        await say([ERROR_TEXT[res.error][c.lang]], { remember: false });
+        await say([errText(res.error, c.lang)], { remember: false });
         return;
       }
       silent.current = 0;
@@ -482,7 +496,7 @@ Reply with only JSON: {"action":"press"|"open"|"back"|"help"|"read_page"|"read_f
 
   const startListening = useCallback(() => {
     unlockAudio();
-    if (!sttSupported()) { setMicErr('unsupported'); setStatus('error'); void say([ERROR_TEXT.unsupported[R.current.lang]], { remember: false }); return; }
+    if (!sttSupported()) { setMicErr('unsupported'); setStatus('error'); void say([errText('unsupported', R.current.lang)], { remember: false }); return; }
     setMicChoice('yes'); setMic('yes'); R.current.mic = 'yes'; userPaused.current = false;
     speaker.stop();
     void loop();
@@ -536,7 +550,7 @@ Reply with only JSON: {"action":"press"|"open"|"back"|"help"|"read_page"|"read_f
     const t = window.setTimeout(() => {
       const al = alertsNow();
       void (async () => {
-        await say([L(`${screenTitle()}.`, `${screenTitle()}.`), ...al]);
+        await say([`${screenTitle()}.`, ...al]);
         if (R.current.mic === 'yes' && !userPaused.current) void loop();
       })();
     }, 450);
@@ -670,14 +684,14 @@ function VoiceBar(p: { status: Status; heard: string; spoken: string; mic: 'yes'
     : L('Blind Mode on', 'الوضع الصوتي شغال');
   const listening = p.status === 'listening';
   return (
-    <section className="voicebar" data-blind-ui data-no-tr role="region" aria-label={L('Blind Mode voice controls', 'تحكم الوضع الصوتي')} data-testid="blind-bar" data-status={p.status} lang={p.lang} dir={p.lang === 'ar' ? 'rtl' : 'ltr'}>
+    <section className="voicebar" data-blind-ui data-no-tr role="region" aria-label={L('Blind Mode voice controls', 'تحكم الوضع الصوتي')} data-testid="blind-bar" data-status={p.status} lang={p.lang} dir={isRtl(p.lang) ? 'rtl' : 'ltr'}>
       <div className={`vb-status ${p.micErr && !listening ? 'error' : p.status}`} role="status" aria-live="off" data-testid="blind-status">
         <span className="vb-dot" aria-hidden>{listening ? <LuMic /> : <LuMicOff />}</span>
         <b>{label}</b>
         {p.heard && <span className="vb-heard" data-testid="blind-heard">“{p.heard}”</span>}
       </div>
       {p.spoken && <p className="vb-said" data-testid="blind-said">{p.spoken}</p>}
-      {p.micErr && <p className="vb-err" role="alert">{ERROR_TEXT[p.micErr][p.lang]}</p>}
+      {p.micErr && <p className="vb-err" role="alert">{errText(p.micErr, p.lang)}</p>}
       {(p.mic === null && sttSupported()) ? (
         <div className="vb-consent">
           <p className="vb-note">{L('Blind Mode listens only while the microphone icon is on. Your browser turns speech into text (Chrome: Google; Safari: Apple). AccessCare does not record or keep audio.', 'الوضع الصوتي بيسمع بس والمايك شغال. المتصفح بيحوّل الكلام لنص (كروم: جوجل، سفاري: آبل). أكسس كير مش بيسجّل ولا بيحتفظ بأي صوت.')}</p>

@@ -3,6 +3,7 @@
 // understanding checks (T…), unanswered questions (Q…) and photos (P…). Every
 // line cites its source. AI may only condense these lines (same checks as the
 // "what changed" summary: real references, no new numbers, nothing diagnostic).
+import { dateLocale } from '../../i18n/lang';
 import type { DiaryEntry } from '../../domain/diary';
 import type { Message } from '../../domain/types';
 import type { DoseData, PatientRecord, PhotoData } from '../../domain/care';
@@ -13,7 +14,7 @@ import { PROMPT_PREFIX } from '../clinical/engine';
 export interface BriefSection { key: 'urgent' | 'changes' | 'medicines' | 'understanding' | 'open' | 'photos'; en: string; ar: string; lines: ChangeLine[] }
 export interface Brief { sections: BriefSection[]; summary: ChangeSummary; sources: { ref: string; en: string; ar: string; at: string }[]; ai?: { lines: { text: string; refs: string[] }[]; rejected: number } }
 
-const d = (iso: string, lang: 'en' | 'ar') => new Date(iso).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short' });
+const d = (iso: string, lang: string) => new Date(iso).toLocaleDateString(dateLocale(lang), { day: 'numeric', month: 'short' });
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
 
 export function buildBrief(input: {

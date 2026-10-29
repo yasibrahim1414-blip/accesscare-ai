@@ -1,5 +1,6 @@
 // Caregiver account: the people who linked this caregiver, the summary each
 // patient's app shares with them, and recording a dose or a note for them.
+import { dateLocale } from '../../i18n/lang';
 import React, { useState } from 'react';
 import { LuHeartHandshake, LuCopy, LuPill, LuCircleCheck, LuTriangleAlert, LuNotebookPen, LuStethoscope, LuSiren, LuChevronRight, LuClock, LuPhone } from 'react-icons/lu';
 import { useApp, useLoad } from '../../app/AppContext';
@@ -7,7 +8,7 @@ import { Button, Empty, ErrorState, LargeBar, Skeleton, TopBar, copyText, initia
 import { localDay, type CareDigest } from '../../domain/care';
 import { useL } from '../care/MedScreens';
 
-const fmt = (iso: string, lang: string) => (iso ? new Date(iso).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+const fmt = (iso: string, lang: string) => (iso ? new Date(iso).toLocaleString(dateLocale(lang), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 const STATUS: Record<string, [string, string]> = { taken: ['Taken', 'اتاخدت'], missed: ['Missed', 'فاتت'], side_effect: ['Side effect', 'عرض جانبي'], due: ['Due / not checked', 'مستنية / مش متسجلة'], upcoming: ['Later', 'بعدين'] };
 
 export function CaregiverHome() {

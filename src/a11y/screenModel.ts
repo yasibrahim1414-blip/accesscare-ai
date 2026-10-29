@@ -4,6 +4,8 @@
 // here", to press a control by name and to help fill in forms. Nothing is
 // invented: if it is not on the screen, it is not offered.
 
+import { tr, listSep, type Lang } from '../i18n/lang';
+
 export type ItemRole = 'button' | 'link' | 'field' | 'select' | 'checkbox' | 'radio' | 'tab';
 export interface Item { el: HTMLElement; name: string; role: ItemRole; value?: string; checked?: boolean; disabled: boolean; secret?: boolean; required?: boolean }
 
@@ -118,14 +120,14 @@ export function setFieldValue(el: HTMLElement, value: string) {
 }
 
 /** A spoken description of one control: "Settings, button", "Email, text field, empty". */
-export function describe(it: Item, lang: 'en' | 'ar'): string {
-  const ar = lang === 'ar';
-  const kind = { button: ar ? 'زرار' : 'button', link: ar ? 'رابط' : 'link', field: ar ? 'خانة' : 'text field', select: ar ? 'قائمة اختيار' : 'menu', checkbox: ar ? 'اختيار' : 'checkbox', radio: ar ? 'اختيار' : 'option', tab: ar ? 'تبويب' : 'tab' }[it.role];
+export function describe(it: Item, lang: Lang): string {
+  const L = (en: string, ar: string) => tr(en, ar, lang);
+  const kind = { button: L('button', 'زرار'), link: L('link', 'رابط'), field: L('text field', 'خانة'), select: L('menu', 'قائمة اختيار'), checkbox: L('checkbox', 'اختيار'), radio: L('option', 'اختيار'), tab: L('tab', 'تبويب') }[it.role];
   const parts = [it.name, kind];
-  if (it.role === 'field') parts.push(it.secret ? (it.value ? (ar ? 'مكتوب فيها' : 'filled in') : (ar ? 'فاضية' : 'empty')) : it.value ? it.value : (ar ? 'فاضية' : 'empty'));
+  if (it.role === 'field') parts.push(it.secret ? (it.value ? L('filled in', 'مكتوب فيها') : L('empty', 'فاضية')) : it.value ? it.value : L('empty', 'فاضية'));
   if (it.role === 'select' && it.value) parts.push(it.value);
-  if (it.role === 'checkbox' || it.role === 'radio') parts.push(it.checked ? (ar ? 'متعلّم عليه' : 'checked') : (ar ? 'مش متعلّم عليه' : 'not checked'));
-  if (it.el.getAttribute('aria-current') === 'page' || it.el.getAttribute('aria-selected') === 'true') parts.push(ar ? 'الصفحة الحالية' : 'current');
-  if (it.disabled) parts.push(ar ? 'مش متاح دلوقتي' : 'unavailable');
-  return parts.join(ar ? '، ' : ', ');
+  if (it.role === 'checkbox' || it.role === 'radio') parts.push(it.checked ? L('checked', 'متعلّم عليه') : L('not checked', 'مش متعلّم عليه'));
+  if (it.el.getAttribute('aria-current') === 'page' || it.el.getAttribute('aria-selected') === 'true') parts.push(L('current', 'الصفحة الحالية'));
+  if (it.disabled) parts.push(L('unavailable', 'مش متاح دلوقتي'));
+  return parts.join(listSep(lang));
 }

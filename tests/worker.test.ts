@@ -50,7 +50,7 @@ test('worker: conversation prompts, answer size, natural voice route and status 
     assert.equal(JSON.parse(sent[1].body).max_tokens, 1200, 'answer size is capped');
     // status: tells which services exist, never the keys
     r = await worker.fetch(new Request('https://w/status', { headers: { origin: 'https://app.example' } }), full);
-    const st = await r.json(); assert.deepEqual(st, { version: 7, db: false, ai: true, model: 'claude-haiku-5-5', tts: true, ttsProvider: 'Azure AI Speech', ttsLangs: ['en', 'ar'] });
+    const st = await r.json(); assert.deepEqual(st, { version: 8, db: false, ai: true, model: 'claude-haiku-5-5', tts: true, ttsProvider: 'Azure AI Speech', ttsLangs: ['en', 'ar', 'fr', 'ur', 'hi'] });
     assert.doesNotMatch(JSON.stringify(st), /secret/);
     assert.equal((await (await worker.fetch(new Request('https://w/status', { headers: { origin: 'https://app.example' } }), env)).json()).tts, false);
     // tts

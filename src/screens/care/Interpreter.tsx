@@ -7,7 +7,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LuMic, LuMicOff, LuVolume2, LuArrowLeftRight, LuTriangleAlert, LuSave, LuSend, LuLanguages, LuTrash2 } from 'react-icons/lu';
 import { useApp, useLoad } from '../../app/AppContext';
 import { Banner, Button, Sheet, TopBar } from '../../ui/components';
-import { Listener, sttSupported, ERROR_TEXT, bestVoice, ttsAvailable } from '../../services/voice/Speech';
+import { Listener, sttSupported, errText, bestVoice, ttsAvailable, LOCALE } from '../../services/voice/Speech';
+import { LANGS, tr, getLang, isRtl } from '../../i18n/lang';
 import { applyTranslation, interpPrompt, transcriptText, type ILang } from '../../services/care/interpret';
 import { AIStatus } from '../shared/AIStatus';
 import { useL } from './MedScreens';
@@ -19,7 +20,7 @@ function say(text: string, lang: ILang) {
   try {
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = lang === 'ar' ? 'ar-EG' : 'en-US';
+    u.lang = LOCALE[lang];
     const v = bestVoice(lang); if (v) u.voice = v;
     speechSynthesis.speak(u);
   } catch { /* speech not available */ }
@@ -29,8 +30,10 @@ export function InterpreterScreen({ cid }: { cid?: string }) {
   const { nav, ai, me, prefs, backend, toast } = useApp();
   const { L } = useL();
   const isDoctor = me?.profile.role === 'doctor';
-  const [pLang, setPLang] = useState<ILang>('ar');
-  const dLang: ILang = pLang === 'ar' ? 'en' : 'ar';
+  // the patient's language starts as the app's language (Arabic when the app is in English); the doctor's as English
+  const [pLang, setPLang] = useState<ILang>(() => (getLang() === 'en' ? 'ar' : getLang()));
+  const [dLang, setDLang] = useState<ILang>('en');
+  const swap = () => { setPLang(dLang); setDLang(pLang); };
   const [lines, setLines] = useState<Line[]>([]);
   const [typed, setTyped] = useState<{ patient: string; doctor: string }>({ patient: '', doctor: '' });
   const [listening, setListening] = useState<'patient' | 'doctor' | null>(null);
@@ -70,7 +73,7 @@ export function InterpreterScreen({ cid }: { cid?: string }) {
     try { speechSynthesis.cancel(); } catch { /* */ }
     const r = await listener.listen(speaker === 'patient' ? pLang : dLang, 15000);
     setListening(null);
-    if ('error' in r) { if (r.error !== 'aborted') setMicErr(ERROR_TEXT[r.error][pLang === 'ar' && speaker === 'patient' ? 'ar' : 'en']); return; }
+    if ('error' in r) { if (r.error !== 'aborted') setMicErr(errText(r.error, speaker === 'patient' ? pLang : dLang)); return; }
     await translate(speaker, r.text);
   };
 
@@ -89,17 +92,21 @@ export function InterpreterScreen({ cid }: { cid?: string }) {
 
   const side = (who: 'patient' | 'doctor') => {
     const lang = who === 'patient' ? pLang : dLang;
-    const label = who === 'patient' ? (lang === 'ar' ? 'المريض' : 'Patient') : (lang === 'ar' ? 'الطبيب' : 'Doctor');
-    const hint = lang === 'ar' ? 'اتكلم بالعربي' : 'Speak English';
+    const label = who === 'patient' ? tr('Patient', 'المريض', lang) : tr('Doctor', 'الطبيب', lang);
+    const hint = tr('Speak English', 'اتكلم بالعربي', lang);
+    const setL = who === 'patient' ? setPLang : setDLang;
     return (
-      <div className={`interp-side side-${who}`} dir={lang === 'ar' ? 'rtl' : 'ltr'} data-testid={`interp-${who}`}>
-        <div className="row between"><b data-no-tr>{label}</b><span className="tiny muted" data-no-tr>{lang === 'ar' ? 'عربي' : 'English'}</span></div>
+      <div className={`interp-side side-${who}`} dir={isRtl(lang) ? 'rtl' : 'ltr'} lang={lang} data-testid={`interp-${who}`}>
+        <div className="row between"><b data-no-tr>{label}</b>
+          <select className="input interp-lang" value={lang} onChange={(e) => setL(e.target.value as ILang)} aria-label={`${label}: ${tr('language', 'اللغة', lang)}`} data-no-tr data-testid={`interp-lang-${who}`}>
+            {LANGS.map((x) => <option key={x.id} value={x.id} lang={x.id}>{x.native}</option>)}
+          </select></div>
         {sttSupported() && <Button big block variant={who === 'doctor' ? 'navy' : 'primary'} disabled={!ready || (!!listening && listening !== who)} onClick={() => void listen(who)} aria-pressed={listening === who} data-testid={`interp-mic-${who}`}>
-          {listening === who ? <><LuMicOff aria-hidden /> <span data-no-tr>{lang === 'ar' ? 'بسمعك… دوس لما تخلص' : 'Listening… tap when done'}</span></> : <><LuMic aria-hidden /> <span data-no-tr>{hint}</span></>}
+          {listening === who ? <><LuMicOff aria-hidden /> <span data-no-tr>{tr('Listening… tap when done', 'بسمعك… دوس لما تخلص', lang)}</span></> : <><LuMic aria-hidden /> <span data-no-tr>{hint}</span></>}
         </Button>}
         <form className="row" onSubmit={(e) => { e.preventDefault(); send(who); }}>
-          <input className="input grow" dir="auto" value={typed[who]} onChange={(e) => setTyped({ ...typed, [who]: e.target.value })} placeholder={lang === 'ar' ? 'أو اكتب هنا' : 'or type here'} aria-label={lang === 'ar' ? `${label}: اكتب` : `${label}: type`} disabled={!ready} maxLength={1200} data-testid={`interp-type-${who}`} data-no-tr />
-          <button className="iconbtn" type="submit" disabled={!ready || !typed[who].trim()} aria-label={lang === 'ar' ? 'ترجم' : 'Translate'} data-testid={`interp-send-${who}`}><LuSend /></button>
+          <input className="input grow" dir="auto" value={typed[who]} onChange={(e) => setTyped({ ...typed, [who]: e.target.value })} placeholder={tr('or type here', 'أو اكتب هنا', lang)} aria-label={`${label}: ${tr('type', 'اكتب', lang)}`} disabled={!ready} maxLength={1200} data-testid={`interp-type-${who}`} data-no-tr />
+          <button className="iconbtn" type="submit" disabled={!ready || !typed[who].trim()} aria-label={tr('Translate', 'ترجم', lang)} data-testid={`interp-send-${who}`}><LuSend /></button>
         </form>
       </div>
     );
@@ -107,7 +114,7 @@ export function InterpreterScreen({ cid }: { cid?: string }) {
 
   return (
     <>
-      <TopBar title={L('Visit interpreter', 'مترجم الزيارة')} onBack={nav.back} right={<button className="iconbtn" onClick={() => setPLang(pLang === 'ar' ? 'en' : 'ar')} aria-label={L('Swap languages', 'بدّل اللغات')} data-testid="interp-swap"><LuArrowLeftRight /></button>} />
+      <TopBar title={L('Visit interpreter', 'مترجم الزيارة')} onBack={nav.back} right={<button className="iconbtn" onClick={swap} aria-label={L('Swap languages', 'بدّل اللغات')} data-testid="interp-swap"><LuArrowLeftRight /></button>} />
       <div className="screen screen-in"><div className="pad">
         <p className="small muted">{L('For a visit in person: each of you speaks in your own language, one at a time. Claude translates; the translation is shown large and read aloud. Nothing is recorded.', 'لزيارة في العيادة: كل واحد يتكلم بلغته، واحد واحد. Claude بيترجم، والترجمة بتظهر كبيرة وبتتقري بصوت. مفيش تسجيل.')}</p>
         {isDoctor ? (
@@ -122,10 +129,10 @@ export function InterpreterScreen({ cid }: { cid?: string }) {
         <div className="interp-log" aria-live="polite" data-testid="interp-log">
           {lines.map((l) => (
             <div key={l.id} className={`interp-line from-${l.speaker}`} data-testid="interp-line">
-              <p className="tiny muted" dir="auto" data-no-tr><b>{l.speaker === 'patient' ? (l.from === 'ar' ? 'المريض' : 'Patient') : (l.from === 'ar' ? 'الطبيب' : 'Doctor')}:</b> {l.source}</p>
+              <p className="tiny muted" dir="auto" data-no-tr><b>{l.speaker === 'patient' ? tr('Patient', 'المريض', l.from) : tr('Doctor', 'الطبيب', l.from)}:</b> {l.source}</p>
               {l.pending ? <p className="small" role="status">{L('Translating…', 'بترجم…')}</p> : l.failed ? <p className="small danger-text" data-no-tr>{l.failed}</p> : (
                 <>
-                  <p className="interp-tr" dir={l.to === 'ar' ? 'rtl' : 'ltr'} lang={l.to} data-no-tr data-testid="interp-tr">{l.translation}</p>
+                  <p className="interp-tr" dir={isRtl(l.to) ? 'rtl' : 'ltr'} lang={l.to} data-no-tr data-testid="interp-tr">{l.translation}</p>
                   <div className="row wrap" style={{ gap: 6 }}>
                     <button className="linkbtn small" onClick={() => say(l.translation, l.to)}><LuVolume2 aria-hidden /> {L('Say again', 'قولها تاني')}</button>
                     {!l.numbersOk && <span className="small warn-text" data-testid="interp-numbers"><LuTriangleAlert aria-hidden /> {L('Numbers differ — check doses and times together.', 'الأرقام مختلفة — راجعوا الجرعات والمواعيد مع بعض.')}</span>}

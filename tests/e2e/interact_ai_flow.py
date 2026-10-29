@@ -54,7 +54,7 @@ with sync_playwright() as p:
     doc.get_by_test_id('probe-send').click(); expect(doc.get_by_test_id('probe-bubble')).to_be_visible(timeout=15000)
 
     # patient switches the app to Arabic
-    pat.goto(f'{BASE}?uid=u-pat&name=Omar'); pat.locator('[data-testid=lang-switch]:visible').first.click()
+    pat.goto(f'{BASE}?uid=u-pat&name=Omar'); pat.locator('[data-testid=lang-switch]:visible').first.click(); pat.locator('[data-testid=lang-opt-ar]').click()
     pat.wait_for_function("document.documentElement.dir === 'rtl'")
     expect(pat.get_by_test_id('home-teachback')).to_be_visible(timeout=20000)
     expect(pat.get_by_test_id('home-questions')).to_be_visible()

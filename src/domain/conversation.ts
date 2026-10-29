@@ -13,7 +13,8 @@ import type { Sensation } from './types';
 export type Via = 'voice' | 'text' | 'touch' | 'body_map';
 export type Prov = 'said' | 'chosen' | 'inferred';
 export type SlotId = 'location' | 'side' | 'sensation' | 'severity' | 'onset' | 'onset_type' | 'pattern' | 'associated';
-export type ConsultLang = 'en' | 'ar';
+import type { Lang } from '../i18n/lang';
+export type ConsultLang = Lang;
 
 export interface Fact {
   value: string;

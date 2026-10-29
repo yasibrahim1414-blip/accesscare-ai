@@ -17,6 +17,7 @@ import type { ConsultRecord, Complaint, Fact, Pending, SlotId, Via } from '../..
 import { BODY_REGIONS } from '../../domain/bodyRegions';
 import { BODY, CONCEPT_BY_ID, CONCEPTS, LOCATIONS, ONSET, ONSET_TYPE, PATTERN, SENSATIONS, SEVERITY, SIDE, norm } from './lexicon';
 import { ruleTurn, safetyCheck, nextQuestion, detectLang, addRegions, sidedIds, type ConsultInput, type ConsultTurn } from './Consult';
+import { badReplyMore, AI_LANG } from '../langWords';
 
 /** Must match a prefix allowed by server/cloudflare-worker.mjs */
 export const CONVERSE_PREFIX = 'You are AccessCare AI, a warm medical communication assistant';
@@ -41,11 +42,11 @@ function compactRecord(rec: ConsultRecord) {
 export function buildPrompt(rec: ConsultRecord, input: ConsultInput): string {
   const said = input.kind === 'text' ? input.text : input.kind === 'option' ? input.label : `(body map) ${input.ids.join(', ')}`;
   const via = input.via === 'touch' ? 'tapping an answer button' : input.via === 'text' ? 'typing' : input.via === 'body_map' ? 'the body map' : 'speaking (speech recognition may contain small mistakes)';
-  const lang = detectLang(said) ?? rec.lang;
+  const lang = detectLang(said, rec.lang) ?? rec.lang;
   const recent = rec.turns.slice(-6).map((t) => `${t.who}: ${t.text.slice(0, 220)}`);
   return `${CONVERSE_PREFIX}. You help a patient tell their doctor what they feel, by talking with them kindly, like a thoughtful nurse taking notes — not like a form.
 Rules: never diagnose or name possible illnesses; never suggest medicines or treatments; never say a symptom is harmless or that they will be fine; never claim to be a doctor or a human. You may explain in general terms why a question matters. If something could be an emergency, say so plainly and tell them to call emergency services now.
-Language: answer in ${lang === 'ar' ? 'warm, simple Egyptian Arabic (no English words unless the patient used them)' : 'warm, plain English'}.
+Language: answer in ${AI_LANG[lang] ?? AI_LANG.en}. Options are written in the same language.
 Known so far (complaints): ${JSON.stringify(compactRecord(rec))}
 Patient said they do NOT have: ${JSON.stringify(rec.denied)}
 Recent conversation: ${JSON.stringify(recent)}
@@ -72,7 +73,7 @@ export function guardReply(text: unknown, max = 420): string | null {
   if (typeof text !== 'string') return null;
   const t = text.replace(/\s+/g, ' ').trim();
   if (t.length < 2 || t.length > max) return null;
-  if (BAD_EN.test(t) || BAD_AR.test(norm(t)) || BAD_AR.test(t)) return null;
+  if (BAD_EN.test(t) || BAD_AR.test(norm(t)) || BAD_AR.test(t) || badReplyMore(t)) return null;
   return t;
 }
 
@@ -102,7 +103,7 @@ export function applyAI(prev: ConsultRecord, input: ConsultInput, raw: unknown):
   const rec: ConsultRecord = JSON.parse(JSON.stringify(prev));
   const said = input.kind === 'text' ? input.text : input.kind === 'option' ? input.label : '';
   const via: Via = input.via;
-  const det = detectLang(said); if (det) rec.lang = det;
+  const det = detectLang(said, rec.lang); if (det) rec.lang = det;
   rec.turns.push({ who: 'patient', text: said || `[body map: ${input.kind === 'regions' ? input.ids.join(', ') : ''}]`, via });
   const newIds: Record<string, string> = {};
   const nextId = () => `c${Math.max(0, ...rec.complaints.map((x) => Number(x.id.slice(1)) || 0)) + 1}`;
@@ -130,7 +131,7 @@ export function applyAI(prev: ConsultRecord, input: ConsultInput, raw: unknown):
           if (!k && !lab) continue;
           c = { id: nextId(), concept, en: k?.en ?? (rec.lang === 'en' ? lab : lab), ar: k?.ar ?? lab, quote: said.slice(0, 300), via, prov: inferred ? 'inferred' : 'said', confirmed: !inferred,
             regions: (k?.regions ?? []).map((id) => ({ id, quote: quote ?? undefined, prov: prov(inferred, quote), by: 'ai' as const, via, confirmed: !inferred })), facts: {}, unknown: [], asked: [] };
-          if (lab && k) { if (rec.lang === 'ar') c.ar = lab; else c.en = lab; }
+          if (lab && k) { if (rec.lang === 'ar') c.ar = lab; else if (rec.lang === 'en') c.en = lab; } // French/Urdu/Hindi labels come from the dictionaries; the English stays for the doctor
           if (k?.sensation) c.facts.sensation = { value: k.sensation, en: k.sensation, ar: SENSATIONS.find((s) => s.value === k.sensation)?.ar ?? k.sensation, ...(quote ? { quote } : {}), prov: prov(inferred, quote), by: 'ai', via, confirmed: !inferred };
           base.complaints.push(c);
           newIds[key] = c.id;

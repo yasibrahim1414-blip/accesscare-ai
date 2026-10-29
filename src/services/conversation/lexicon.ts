@@ -6,20 +6,31 @@
 
 import type { Sensation } from '../../domain/types';
 import type { SlotId } from '../../domain/conversation';
+import { MORE, NEGATORS_BEFORE, NEGATORS_AFTER, NEG_TAIL } from './lexiconMore';
+
+/** the French, Urdu and Hindi words for an entry */
+const more = (key: string): string[] => { const m = MORE[key]; return m ? [...(m.fr ?? []), ...(m.ur ?? []), ...(m.hi ?? [])] : []; };
 
 // ---------------------------------------------------------------- text helpers
-const AR_DIGITS: Record<string, string> = { '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9' };
+import { foldText } from '../langWords';
 
-/** lower-case, Arabic letter variants unified, punctuation removed, single spaces */
+/**
+ * lower-case, Arabic letter variants unified, French accents optional, Hindi spelling
+ * variants unified, digits in every script as 0-9, punctuation removed, single spaces.
+ * French elisions are split ("l'estomac" → "l' estomac") so the noun matches on its own.
+ */
 export function norm(text: string): string {
-  return text.toLowerCase().replace(/[٠-٩]/g, (d) => AR_DIGITS[d]).replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
-    .replace(/[ً-ْـ]/g, '') // harakat, tatweel
-    .replace(/[^\p{L}\p{N}' ]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  return foldText(text.toLowerCase()).replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
+    .replace(/[\u064b-\u065f\u0670\u06d6-\u06ed\u0640]/g, '') // harakat, hamza marks, tatweel
+    .replace(/(^|[\s(])(qu|[ljdmnstc])'(?=\p{L})/gu, "$1$2' ")
+    .replace(/[^\p{L}\p{M}\p{N}' ]+/gu, ' ').replace(/\s+/g, ' ').trim();
 }
 
 const AR_PREFIXES = ['وبال', 'فبال', 'بال', 'وال', 'فال', 'لل', 'ال', 'و', 'ب', 'ف', 'ل'];
 const AR_SUFFIXES = ['', 'ي', 'يا', 'ه', 'ها', 'ك', 'نا', 'هم', 'ين', 'ات'];
-const isArabic = (s: string) => /[؀-ۿ]/.test(s);
+/** Arabic (not Urdu: Urdu words never get Arabic prefixes or suffixes removed) */
+const isArabic = (s: string) => /[؀-ۿ]/.test(s) && !/[ٹڈڑںھہۂیےۓکگپچژ]/.test(s);
+export const isArabicScript = (s: string) => /[؀-ۿ]/.test(s);
 
 function tokenForms(tok: string): string[] {
   const out = new Set([tok]);
@@ -66,10 +77,17 @@ export function findAny(tokens: string[], forms: string[]): Hit | null {
 export const tokensOf = (text: string) => norm(text).split(' ').filter(Boolean);
 export const hasAny = (text: string, forms: string[]) => !!findAny(tokensOf(text), forms);
 
-const NEGATORS = ['no', 'not', 'without', "don't", 'dont', 'never', 'none', "haven't", 'havent', 'مفيش', 'مافيش', 'مش', 'ما', 'لا', 'بدون', 'غير', 'من غير', 'معنديش', 'ماعنديش', 'مبقاش', 'ليس', 'لا يوجد'];
-/** true when one of the two words before a hit negates it ("no nausea", "مفيش غثيان") */
-export function negatedAt(tokens: string[], index: number): boolean {
-  for (let k = Math.max(0, index - 2); k < index; k++) if (NEGATORS.some((n) => norm(n) === tokens[k])) return true;
+const NEGATORS = ['no', 'not', 'without', "don't", 'dont', 'never', 'none', "haven't", 'havent', 'مفيش', 'مافيش', 'مش', 'ما', 'لا', 'بدون', 'غير', 'من غير', 'معنديش', 'ماعنديش', 'مبقاش', 'ليس', 'لا يوجد', ...NEGATORS_BEFORE].map(norm);
+const NEG_AFTER = NEGATORS_AFTER.map(norm), NEG_END = NEG_TAIL.map(norm);
+/**
+ * true when one of the two words before a hit negates it ("no nausea", "مفيش غثيان", "pas de fièvre"),
+ * or — in Urdu and Hindi — "no" comes right after it and ends the sentence ("بخار نہیں ہے", "बुखार नहीं").
+ * `length` is the hit's number of words (for the Urdu/Hindi check).
+ */
+export function negatedAt(tokens: string[], index: number, length = 1): boolean {
+  for (let k = Math.max(0, index - 2); k < index; k++) if (NEGATORS.includes(tokens[k])) return true;
+  const after = index + length;
+  if (NEG_AFTER.includes(tokens[after] ?? '') && (after + 1 >= tokens.length || NEG_END.includes(tokens[after + 1]))) return true;
   return false;
 }
 
@@ -110,6 +128,10 @@ export const BODY: BodyWord[] = [
   { region: 'ankle', sided: true, area: 'leg', words: ['ankle', 'كاحل', 'عرقوب'] },
   { region: 'foot', sided: true, area: 'leg', words: ['foot', 'feet', 'toe', 'toes', 'heel', 'قدم', 'كعب', 'صوابع رجلي'] },
 ];
+
+/** the English and Arabic words (spelling-mistake matching uses only these) */
+const BODY_BASE = new Map(BODY.map((b) => [b, b.words.slice()]));
+for (const b of BODY) b.words.push(...more(`body:${b.region}/${b.detail ?? ''}`));
 
 // ---------------------------------------------------------------- symptoms
 export interface Concept {
@@ -178,6 +200,8 @@ export const CONCEPTS: Concept[] = [
   { id: 'unwell', en: 'feeling unwell', ar: 'مش مرتاح', area: 'general', plan: [],
     words: ['not feeling well', 'feel unwell', 'feel bad', 'feel strange', 'not normal', 'not myself', 'something is wrong', 'sick', 'مش طبيعي', 'مش مظبوط', 'حاسس اني مش طبيعي', 'مش كويس', 'تعبان شويه', 'حاسس بحاجه غريبه', 'مش مرتاح'] },
 ];
+const CONCEPT_BASE = new Map(CONCEPTS.map((c) => [c.id, c.words.slice()]));
+for (const c of CONCEPTS) c.words.push(...more(`concept:${c.id}`));
 export const CONCEPT_BY_ID: Record<string, Concept> = Object.fromEntries(CONCEPTS.map((c) => [c.id, c]));
 
 // ---------------------------------------------------------------- slot values
@@ -216,6 +240,7 @@ export const SENSATIONS: ValueWord[] = [
   { value: 'swelling', en: 'swelling', ar: 'تورم', words: ['swelling', 'swollen', 'وارم', 'منفوخ', 'تورم'] },
   { value: 'weakness', en: 'weakness', ar: 'ضعف', words: ['weak', 'weakness', 'ضعيف', 'ضعف'] },
 ];
+for (const [p, list] of [['sev', SEVERITY], ['onset', ONSET], ['otype', ONSET_TYPE], ['pat', PATTERN], ['side', SIDE], ['sens', SENSATIONS]] as [string, ValueWord[]][]) for (const v of list) v.words.push(...more(`${p}:${v.value}`));
 /** location detail options, by area */
 export const LOCATIONS: Partial<Record<AreaId, ValueWord[]>> = {
   head: [
@@ -247,6 +272,7 @@ export const LOCATIONS: Partial<Record<AreaId, ValueWord[]>> = {
     { value: 'one_side', en: 'one side of the back', ar: 'ناحية واحدة من الضهر', words: ['one side', 'side', 'جنب', 'ناحيه'] },
   ],
 };
+for (const [area, list] of Object.entries(LOCATIONS)) for (const v of list ?? []) if (area !== 'head') v.words.push(...more(`loc:${area}:${v.value}`));
 // head detail words come from BODY entries
 for (const b of BODY) if (b.area === 'head' && b.detail) { const v = LOCATIONS.head!.find((x) => x.value === b.detail); if (v) v.words.push(...b.words); }
 
@@ -265,6 +291,8 @@ export const CUES = {
   question: ['?', '؟'],
   questionStart: ['is it', 'is this', 'is that', 'should i', 'can i', 'could it', 'what is', 'what does', 'what should', 'why', 'how long', 'how can', 'do i need', 'will it', 'هل', 'ليه', 'ايه سبب', 'ايه اللي', 'ازاي', 'امتي', 'ينفع', 'اعمل ايه', 'ده خطير', 'ده معناه ايه', 'المفروض'],
 };
+
+for (const [k, list] of Object.entries(CUES)) list.push(...more(`cue:${k}`));
 
 // ---------------------------------------------------------------- spelling mistakes
 /** Jaro-Winkler similarity (0..1). */
@@ -298,7 +326,7 @@ export function misspelledConcept(tokens: string[], covered: Set<number> = new S
     let best: { id: string; token: string; index: number; score: number } | null = null;
     for (const c of CONCEPTS) {
       if (c.id === 'unwell') continue;
-      for (const w of c.words) {
+      for (const w of CONCEPT_BASE.get(c.id) ?? []) {
         if (w.includes(' ') || w.length < 4 || isArabic(w)) continue;
         const f = norm(w);
         const sc = similarity(tok, f);
@@ -318,7 +346,7 @@ export function misspelledBody(tokens: string[]): { word: BodyWord; token: strin
   tokens.forEach((tok, index) => {
     if (!/^[a-z']+$/.test(tok) || tok.length < 4 || COMMON.has(tok) || exact.has(tok)) return;
     let best: { word: BodyWord; sc: number } | null = null;
-    for (const b of BODY) for (const w of b.words) {
+    for (const b of BODY) for (const w of BODY_BASE.get(b) ?? []) {
       if (w.includes(' ') || w.length < 4 || isArabic(w)) continue;
       const sc = similarity(tok, norm(w));
       if (sc >= 0.9 && (!best || sc > best.sc)) best = { word: b, sc };

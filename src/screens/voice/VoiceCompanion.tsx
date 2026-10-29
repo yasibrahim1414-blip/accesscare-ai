@@ -9,7 +9,7 @@ import { LuMic, LuMicOff, LuRepeat, LuPause, LuPlay, LuSquare, LuSend, LuKeyboar
 import { homeFor, useApp, useLoad } from '../../app/AppContext';
 import { Banner, Button, Field, TopBar } from '../../ui/components';
 import { initialState, step, t, type Ctx, type DialogState, type Effect, type Input, type Msg, type Option, type Turn } from '../../services/voice/VoiceDialog';
-import { Listener, Speaker, ERROR_TEXT, primeSpeech, sttSupported, ttsAvailable, naturalVoice, unlockAudio, voicesFor, bestVoice, onlyBasicVoices, type SpeechErr } from '../../services/voice/Speech';
+import { Listener, Speaker, errText, primeSpeech, sttSupported, ttsAvailable, naturalVoice, unlockAudio, voicesFor, bestVoice, onlyBasicVoices, type SpeechErr } from '../../services/voice/Speech';
 import { converse } from '../../services/conversation/ai';
 import { startConsult, reportData, summaryLines as consultSummaryLines, type ConsultTurn } from '../../services/conversation/Consult';
 import { BodySelector } from '../../body/BodySelector';
@@ -25,7 +25,8 @@ import { rememberAccount } from '../auth/AuthScreens';
 import type { AuthInfo } from '../../services/backend/Backend';
 import { remoteStatus } from '../../services/ai/RemoteSample';
 import { runtimeConfig } from '../../services/config';
-import { useLang, getLang, setLang } from '../../i18n/lang';
+import { useLang, getLang, setLang, tr, isRtl, type Lang } from '../../i18n/lang';
+import { chosenVoice, withVoice } from '../../domain/voice';
 import { explainAIError, type AIHealth } from '../../services/ai/health';
 
 // one automatic connection test per page load (a real, tiny AI request), shared by Talk and Blind mode
@@ -35,7 +36,7 @@ type LogLine = { who: 'assistant' | 'patient'; text: string; ai?: boolean };
 type Status = 'idle' | 'speaking' | 'listening' | 'thinking';
 
 
-const L = (lang: 'en' | 'ar', en: string, ar: string) => (lang === 'ar' ? ar : en);
+const L = (lang: Lang, en: string, ar: string) => tr(en, ar, lang);
 
 /** mode 'blind': Blind Mode (spoken guidance, gestures). mode 'talk': the conversation for every patient (speak, type, tap, body map). */
 export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } = {}) {
@@ -78,6 +79,7 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
   const [formErr, setFormErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [f, setF] = useState({ login: '', password: '', confirm: '', code: '', doctorId: '', email: '' });
+  const fState = f;
   const voiceInput = bp.input === 'voice' && sttSupported() && micConsent === 'yes';
 
   const speaker = useMemo(() => new Speaker((s) => { setPaused(s.paused); setStatus((cur) => (s.speaking ? 'speaking' : cur === 'speaking' ? 'idle' : cur)); }), []);
@@ -127,7 +129,7 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
   async function speak(say: string[]) {
     if (!ttsAvailable()) return;
     const b = bpRef.current;
-    await speaker.speak(say, { lang: stateRef.current.lang ?? b.lang, rate: b.rate, voice: b.voice, voiceAr: b.voiceAr, voiceEn: b.voiceEn, engine: b.engine });
+    await speaker.speak(say, { lang: stateRef.current.lang ?? b.lang, rate: b.rate, voice: b.voice, voiceAr: b.voiceAr, voiceEn: b.voiceEn, voices: b.voices, engine: b.engine });
   }
 
   async function listenOnce(byUser = false) {
@@ -141,7 +143,7 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
       // silence is announced once per question, never repeated in a loop
       if (r.error === 'no-speech' && ++noSpeech.current > 1) return;
       setSpeechErr(r.error);
-      const msg = ERROR_TEXT[r.error][bpRef.current.lang];
+      const msg = errText(r.error, bpRef.current.lang);
       pushAssistant(msg);
       if (r.error === 'not-allowed' || r.error === 'audio-capture' || r.error === 'unsupported' || r.error === 'network') { setMicConsent('no'); micConsentRef.current = 'no'; }
       await speak([msg]);
@@ -254,7 +256,7 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
           const cur = bpRef.current;
           const next: BlindPrefs = e.change === 'reset' ? { ...DEFAULT_BLIND, lang: cur.lang }
             : { ...cur, ...(e.change === 'faster' ? { rate: Math.min(1.6, +(cur.rate + 0.15).toFixed(2)) } : e.change === 'slower' ? { rate: Math.max(0.6, +(cur.rate - 0.15).toFixed(2)) }
-              : e.change === 'normal' ? { rate: 1 } : e.change === 'lang_ar' ? { lang: 'ar' as const } : e.change === 'lang_en' ? { lang: 'en' as const }
+              : e.change === 'normal' ? { rate: 1 } : e.change.startsWith('lang_') ? { lang: e.change.slice(5) as Lang }
               : e.change === 'brief' ? { guidance: 'brief' as const } : e.change === 'full' ? { guidance: 'full' as const }
               : e.change === 'gestures_off' ? { navigation: 'screenreader' as const } : { navigation: 'gestures' as const }) };
           await saveBlind(next);
@@ -342,6 +344,9 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
   // ---------------------------------------------------------------- forms (typed, never spoken)
   async function submitForm(kind: 'signup' | 'login' | 'recover' | 'doctor') {
     setFormErr(null); setBusy(true);
+    // what is in the fields right now (a password manager or fast typing can submit before the last change is rendered)
+    const now = (id: string, v: string) => { const el = document.getElementById(id); return el instanceof HTMLInputElement ? el.value : v; };
+    const f = { ...fState, email: now('va-email', fState.email), login: now('va-login', fState.login), code: now('va-code', fState.code), password: now('va-password', fState.password), confirm: now('va-confirm', fState.confirm), doctorId: now('va-doctor', fState.doctorId) };
     try {
       if (kind === 'signup') {
         if (f.password.length < 8) throw new Error(L(lang, 'The password needs at least 8 characters.', 'كلمة السر لازم تكون ٨ حروف على الأقل.'));
@@ -457,22 +462,22 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
   const consult = stateRef.current.consult;
   const inConsult = phase === 'consult' || phase === 'review' || phase === 'urgent';
   const devVoices = voicesFor(lang);
-  const curVoice = bestVoice(lang, lang === 'ar' ? bp.voiceAr : bp.voiceEn);
+  const curVoice = bestVoice(lang, chosenVoice(bp, lang));
   const lastErr = remoteStatus.error || ai.lastError || consult?.ai.lastError || '';
   const aiProblem = !ai.supported || !ctx.aiOn ? null
     : health && !health.ok ? health
     : lastAi.failed ? explainAIError(lastErr || 'no answer')
     : null;
-  const aiLine = !ai.supported ? L(lang, 'AI: not set up in this version — I use guided questions with fixed English and Arabic words.', 'الذكاء الاصطناعي: مش متجهز في النسخة دي — بستخدم أسئلة ثابتة وكلمات محددة بالعربي والإنجليزي.')
+  const aiLine = !ai.supported ? L(lang, 'AI: not set up in this version — I use guided questions and a fixed list of words.', 'الذكاء الاصطناعي: مش متجهز في النسخة دي — بستخدم أسئلة ثابتة وكلمات محددة.')
     : !ctx.aiOn ? L(lang, 'AI: off for your account (turn it on in Settings, or say "settings" then "turn on AI"). I use guided questions meanwhile.', 'الذكاء الاصطناعي: مقفول لحسابك (شغّله من الإعدادات، أو قول "الإعدادات" وبعدين "شغّل الذكاء الاصطناعي"). لحد كده بستخدم أسئلة ثابتة.')
-    : lastAi.failed ? L(lang, `AI did not answer the last message${remoteStatus.error ? ` (${remoteStatus.error})` : consult?.ai.lastError ? ` (${consult.ai.lastError})` : ''}, so I used guided questions for it.`, `الذكاء الاصطناعي مردش على آخر رسالة${remoteStatus.error ? ` (${remoteStatus.error})` : ''}، فاستخدمت أسئلة ثابتة.`)
-    : consult?.ai.used ? L(lang, `AI: on — Claude understood your words in ${consult.ai.used} message(s) (marked ✨ AI).`, `الذكاء الاصطناعي: شغال — Claude فهم كلامك في ${consult.ai.used} رسالة (عليها علامة ✨ AI).`)
+    : lastAi.failed ? tr('AI did not answer the last message{why}, so I used guided questions for it.', 'الذكاء الاصطناعي مردش على آخر رسالة{why}، فاستخدمت أسئلة ثابتة.', lang, { why: remoteStatus.error ? ` (${remoteStatus.error})` : consult?.ai.lastError ? ` (${consult.ai.lastError})` : '' })
+    : consult?.ai.used ? tr('AI: on — Claude understood your words in {n} message(s) (marked ✨ AI).', 'الذكاء الاصطناعي: شغال — Claude فهم كلامك في {n} رسالة (عليها علامة ✨ AI).', lang, { n: consult.ai.used })
     : L(lang, 'AI: on (not used yet).', 'الذكاء الاصطناعي: شغال (لسه متستخدمش).');
 
   return (
     <>
       <TopBar title={talk ? L(lang, 'Talk to AccessCare', 'اتكلم مع أكسس كير') : L(lang, 'Blind Mode', 'الوضع الصوتي')} onBack={meRef.current ? () => { speaker.stop(); listener.stop(); nav.reset(homeFor(meRef.current)); } : () => nav.reset({ name: 'welcome' })} />
-      <div className={`screen screen-in va${talk ? ' va-talk' : ''}`} lang={lang} dir={lang === 'ar' ? 'rtl' : 'ltr'} ref={surface} {...pointerHandlers} data-testid="voice-companion" data-phase={phase} data-mode={mode}>
+      <div className={`screen screen-in va${talk ? ' va-talk' : ''}`} lang={lang} dir={isRtl(lang) ? 'rtl' : 'ltr'} ref={surface} {...pointerHandlers} data-testid="voice-companion" data-phase={phase} data-mode={mode}>
         <div className="pad">
           <div className={`va-status ${status}`} role="status" aria-live="assertive" data-testid="va-status">
             {status === 'listening' ? <LuMic aria-hidden /> : <LuMicOff aria-hidden />} <b>{statusText2}</b>
@@ -490,8 +495,8 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
               </div>
             </div>
           )}
-          {!sttSupported() && <Banner kind="info">{ERROR_TEXT.unsupported[lang]}</Banner>}
-          {speechErr && speechErr !== 'no-speech' && speechErr !== 'unsupported' && <Banner kind="warn">{ERROR_TEXT[speechErr][lang]}</Banner>}
+          {!sttSupported() && <Banner kind="info">{errText('unsupported', lang)}</Banner>}
+          {speechErr && speechErr !== 'no-speech' && speechErr !== 'unsupported' && <Banner kind="warn">{errText(speechErr, lang)}</Banner>}
 
           {ai.supported && !ctx.aiOn && meRef.current?.profile.role === 'patient' && (
             <div className="banner warn" role="status" data-testid="va-ai-off" style={{ display: 'block' }}>
@@ -516,7 +521,10 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
           {inConsult && (stateRef.current.urgentShown.length > 0) && (
             <div className="banner danger" role="alert" data-testid="va-urgent">
               <b>{L(lang, 'If this could be an emergency, call now:', 'لو ممكن تكون حالة طوارئ، اتصل دلوقتي:')}</b>{' '}
-              <a href="tel:998">998</a> · <a href="tel:999">999</a> ({L(lang, 'UAE', 'الإمارات')}) · <a href="tel:123">123</a> ({L(lang, 'Egypt', 'مصر')}) · <a href="tel:112">112</a>
+              <a href="tel:998">998</a> · <a href="tel:999">999</a> ({L(lang, 'UAE', 'الإمارات')}) · {lang === 'fr' ? <><a href="tel:15">15</a> · <a href="tel:112">112</a> ({L(lang, 'France and Europe', 'فرنسا وأوروبا')})</>
+                : lang === 'ur' ? <><a href="tel:1122">1122</a> · <a href="tel:115">115</a> ({L(lang, 'Pakistan', 'باكستان')})</>
+                : lang === 'hi' ? <><a href="tel:112">112</a> · <a href="tel:108">108</a> ({L(lang, 'India', 'الهند')})</>
+                : <><a href="tel:123">123</a> ({L(lang, 'Egypt', 'مصر')}) · <a href="tel:112">112</a></>}
             </div>
           )}
 
@@ -573,7 +581,7 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
           )}
 
           <form className="va-type" onSubmit={(e) => { e.preventDefault(); sendTyped(); }}>
-            <label htmlFor="va-typed" className="strong small"><LuKeyboard aria-hidden /> {inConsult ? L(lang, 'Or type it, in Arabic or English', 'أو اكتبه، بالعربي أو الإنجليزي') : L(lang, 'Or type your answer', 'أو اكتب إجابتك')}</label>
+            <label htmlFor="va-typed" className="strong small"><LuKeyboard aria-hidden /> {inConsult ? L(lang, 'Or type it, in your language', 'أو اكتبه بلغتك') : L(lang, 'Or type your answer', 'أو اكتب إجابتك')}</label>
             <div className="row">
               <input id="va-typed" className="input grow" value={typed} onChange={(e) => setTyped(e.target.value)} data-va-item autoComplete="off" data-testid="va-typed" dir="auto" />
               <Button type="submit" data-va-item aria-label={L(lang, 'Send answer', 'ابعت الإجابة')} data-testid="va-send"><LuSend aria-hidden /></Button>
@@ -617,14 +625,14 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
                 )}
                 {devVoices.length > 0 && (
                   <label className="stack" style={{ gap: 4 }}>{L(lang, 'Device voice', 'صوت الجهاز')}
-                    <select className="input" value={(lang === 'ar' ? bp.voiceAr : bp.voiceEn) ?? ''} data-testid="va-voice-pick"
-                      onChange={(e) => void saveBlind({ ...bpRef.current, ...(lang === 'ar' ? { voiceAr: e.target.value || undefined } : { voiceEn: e.target.value || undefined }) })}>
+                    <select className="input" value={chosenVoice(bp, lang) ?? ''} data-testid="va-voice-pick"
+                      onChange={(e) => void saveBlind(withVoice(bpRef.current, lang, e.target.value || undefined))}>
                       <option value="">{L(lang, 'Best available (automatic)', 'أحسن صوت متاح (تلقائي)')}</option>
                       {devVoices.map((v) => <option key={v.voiceURI} value={v.name}>{v.name} ({v.lang})</option>)}
                     </select>
                   </label>
                 )}
-                <label className="stack" style={{ gap: 4 }}>{L(lang, `Speed: ${bp.rate.toFixed(2)}×`, `السرعة: ${bp.rate.toFixed(2)}×`)}
+                <label className="stack" style={{ gap: 4 }}>{tr('Speed: {n}×', 'السرعة: {n}×', lang, { n: bp.rate.toFixed(2) })}
                   <input type="range" min={0.6} max={1.6} step={0.05} value={bp.rate} onChange={(e) => void saveBlind({ ...bpRef.current, rate: Number(e.target.value) })} data-testid="va-rate" /></label>
                 <Button variant="secondary" onClick={() => { unlockAudio(); void speak([L(lang, 'Hello, I am AccessCare. I am here to help you tell your doctor how you feel.', 'أهلاً، أنا أكسس كير. أنا هنا علشان أساعدك تقول للدكتور إنت حاسس بإيه.')]); }} data-testid="va-voice-test">{L(lang, 'Test the voice', 'جرّب الصوت')}</Button>
                 {onlyBasicVoices(lang) && !naturalVoice.available && <p className="tiny muted">{L(lang, 'Only a basic voice is installed on this device. For a clearer voice, download an “Enhanced” or “Premium” voice in your phone’s settings (iPhone: Settings → Accessibility → Spoken Content → Voices).', 'الجهاز ده عليه صوت بسيط بس. علشان صوت أوضح، نزّل صوت "Enhanced" أو "Premium" من إعدادات التلفون (آيفون: الإعدادات ← تسهيلات الاستخدام ← المحتوى المنطوق ← الأصوات).')}</p>}
@@ -647,10 +655,11 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
   );
 }
 
-function statusText(s: string, viewed: boolean, lang: 'en' | 'ar') {
+function statusText(s: string, viewed: boolean, lang: Lang) {
   const en: Record<string, string> = { new: viewed ? 'sent and seen by your doctor' : 'sent, not opened yet', in_review: 'your doctor is reviewing it', completed: 'completed by your doctor', cancelled: 'cancelled' };
   const ar: Record<string, string> = { new: viewed ? 'اتبعت والدكتور شافه' : 'اتبعت ولسه متفتحش', in_review: 'الدكتور بيراجعه', completed: 'الدكتور خلّصه', cancelled: 'اتلغى' };
-  return (lang === 'ar' ? ar : en)[s] ?? STATUS_LABELS[s as keyof typeof STATUS_LABELS] ?? s;
+  const e = en[s] ?? STATUS_LABELS[s as keyof typeof STATUS_LABELS] ?? s;
+  return tr(e, ar[s] ?? e, lang);
 }
 
 function consultEvent(t: ConsultTurn): Input {
@@ -666,6 +675,6 @@ export function activateBlindMode() {
   const p = deviceBlind() ?? defaultBlind();
   const next = { ...p, enabled: true, lang: getLang() };
   setDeviceBlind(next);
-  primeSpeech(next.lang === 'ar' ? 'الوضع الصوتي شغال.' : 'Blind Mode is active.', next.lang);
+  primeSpeech(tr('Blind Mode is active.', 'الوضع الصوتي شغال.', next.lang), next.lang);
   return next;
 }

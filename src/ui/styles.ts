@@ -25,6 +25,9 @@ export const CSS = `
   --side-w: 264px; --col: 760px;
 }
 :root[dir="rtl"] { --font-body: "IBM Plex Sans Arabic", "Atkinson Hyperlegible", "Segoe UI", Tahoma, system-ui, sans-serif; }
+:root[lang="ur"] { --font-body: "Noto Nastaliq Urdu", "Noto Naskh Arabic", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, system-ui, sans-serif; }
+:root[lang="ur"] body { line-height: 1.95; }
+:root[lang="hi"] { --font-body: "Atkinson Hyperlegible", "Noto Sans Devanagari", "Nirmala UI", "Mangal", system-ui, -apple-system, sans-serif; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --slate-900: #DCE7EC; --slate-800: #C2D3DB; --slate-700: #A3BAC5; --slate-100: #1B2C35;
   --teal: #3BB3BE; --teal-strong: #5CC6CF; --teal-ink: #7DD3DA; --teal-50: #0E2E32; --teal-100: #154248;
@@ -91,6 +94,17 @@ h1:focus, h1:focus-visible { outline: none; box-shadow: none; }
 .util-btn.blind { background: var(--saffron); border-color: var(--saffron); color: var(--on-saffron); }
 .util-btn.blind.on { background: var(--on-saffron); color: var(--saffron); border-color: var(--on-saffron); }
 .util-btn.lang span { font-family: "IBM Plex Sans Arabic", var(--font-body); }
+.lang-pick { position: relative; display: inline-flex; }
+.lang-pick.wide { display: flex; }
+.lang-menu { position: absolute; top: calc(100% + 6px); inset-inline-end: 0; z-index: 60; min-width: 190px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r); box-shadow: 0 10px 30px rgba(10, 30, 50, .18); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.lang-pick.wide .lang-menu { top: auto; bottom: calc(100% + 6px); inset-inline-start: 0; inset-inline-end: auto; width: 100%; }
+.lang-menu button { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-height: 44px; padding: 6px 12px; border: 0; border-radius: calc(var(--r) - 4px); background: transparent; color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; text-align: start; }
+.lang-menu button:hover, .lang-menu button:focus-visible { background: var(--surface-2); }
+.lang-menu button.on { background: var(--teal-50, var(--surface-2)); color: var(--teal-ink); }
+.lang-menu button.on .ln::after { content: " ✓"; }
+.lang-menu .le { font-weight: 400; font-size: .82em; color: var(--muted); }
+.lang-menu [lang=ur] .ln { font-family: "Noto Nastaliq Urdu", "Noto Naskh Arabic", var(--font-body); line-height: 2; }
+.lang-menu [lang=hi] .ln { font-family: "Noto Sans Devanagari", var(--font-body); }
 .util-btn.wide { width: 100%; justify-content: flex-start; min-height: 44px; border-radius: var(--r); font-size: .9em; padding: 0 12px; }
 @media (max-width: 380px) { .util-btn:not(.wide) span { display: none; } .util-btn:not(.wide) { padding: 0; width: 40px; justify-content: center; } .util-btn.blind span { display: inline; } .util-btn.blind { width: auto; padding: 0 10px; } }
 
@@ -690,6 +704,7 @@ h2.title svg, h3.title svg { flex: none; }
 .interp-side.side-patient { border-color: color-mix(in srgb, var(--teal) 45%, var(--line)); }
 .interp-side.side-doctor { border-color: color-mix(in srgb, var(--navy-700) 35%, var(--line)); }
 .interp-side form { gap: 6px; }
+.interp-lang { width: auto; min-height: 36px; padding: 2px 8px; font-size: .85em; flex: none; }
 .interp-log { display: grid; gap: 10px; }
 .interp-line { padding: 10px 12px; border-radius: var(--r-lg); background: var(--surface-2); border: 1px solid var(--line); }
 .interp-line.from-patient { border-inline-start: 4px solid var(--teal); }

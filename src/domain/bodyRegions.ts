@@ -2,6 +2,9 @@
 // Convention: the patient's LEFT side is +x in 3D (figure faces the viewer),
 // so in a front view the patient's left appears on the viewer's right.
 
+import type { Lang } from '../i18n/lang';
+import { translateTo } from '../i18n/dict';
+
 export type Side = 'left' | 'right' | 'center';
 
 export interface BodyRegion {
@@ -57,10 +60,11 @@ const AR_BASE: Record<string, string> = {
 };
 const AR_GROUP: Record<string, string> = { 'Head & neck': 'الراس والرقبة', Torso: 'الجذع', Arms: 'الدراعين', Legs: 'الرجلين' };
 /** Region label in the screen's language (Arabic or English). */
-export function regionLabelIn(id: string, lang: 'en' | 'ar' = 'en'): string {
+export function regionLabelIn(id: string, lang: Lang = 'en'): string {
   if (lang === 'en') return regionLabel(id);
+  if (lang !== 'ar') return translateTo(regionLabel(id), lang) ?? regionLabel(id);
   const r = REGION_BY_ID[id]; const base = id.replace(/_(l|r)$/, '');
   const name = AR_BASE[base] ?? regionLabel(id);
   return r?.side === 'left' ? `${name} الشمال` : r?.side === 'right' ? `${name} اليمين` : name;
 }
-export const groupLabelIn = (g: string, lang: 'en' | 'ar' = 'en') => (lang === 'ar' ? AR_GROUP[g] ?? g : g);
+export const groupLabelIn = (g: string, lang: Lang = 'en') => (lang === 'ar' ? AR_GROUP[g] ?? g : lang === 'en' ? g : translateTo(g, lang) ?? g);

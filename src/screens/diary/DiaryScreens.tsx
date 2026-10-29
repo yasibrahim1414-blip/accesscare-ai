@@ -1,4 +1,5 @@
 // Symptom diary (patient) and "What changed?" (doctor).
+import { dateLocale, pick } from '../../i18n/lang';
 import React, { useMemo, useRef, useState } from 'react';
 import { LuMic, LuMicOff, LuTrash2, LuSparkles, LuChevronRight, LuNotebookPen, LuTrendingUp, LuPlus, LuX, LuVolume2 } from 'react-icons/lu';
 import { useApp, useLoad } from '../../app/AppContext';
@@ -6,7 +7,7 @@ import { Banner, Button, Empty, ErrorState, LargeBar, Skeleton, TopBar, initials
 import { EmergencyContent } from '../shared/Emergency';
 import { PatientCareSection } from '../doctor/CareDoctor';
 import { useLang, tr, type Lang } from '../../i18n/lang';
-import { Listener, sttSupported, ERROR_TEXT } from '../../services/voice/Speech';
+import { Listener, sttSupported, errText } from '../../services/voice/Speech';
 import { AIStatus } from '../shared/AIStatus';
 import { readDiary, type DiaryReading } from '../../services/diary/understand';
 import { whatChanged, summarizeChanges, seriesOf, type ChangeSummary } from '../../services/diary/changes';
@@ -20,9 +21,9 @@ const PROV_LABEL: Record<DiaryItem['prov'], { en: string; ar: string; cls: strin
   interpretation: { en: 'Understood from your words — check it', ar: 'مفهوم من كلامك — راجعه', cls: 'prov-ai' },
 };
 const QUICK = ['headache', 'pain', 'dizziness', 'nausea', 'fever', 'fatigue', 'cough', 'breathing', 'abdominal_pain', 'back_pain', 'numbness', 'rash'];
-const fmtDay = (iso: string, lang: Lang) => new Date(iso).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-const fmtTime = (iso: string, lang: Lang) => new Date(iso).toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-GB', { hour: 'numeric', minute: '2-digit' });
-const label = (i: { en: string; ar: string }, lang: Lang) => (lang === 'ar' ? i.ar : i.en);
+const fmtDay = (iso: string, lang: Lang) => new Date(iso).toLocaleDateString(dateLocale(lang), { weekday: 'short', day: 'numeric', month: 'short' });
+const fmtTime = (iso: string, lang: Lang) => new Date(iso).toLocaleTimeString(dateLocale(lang), { hour: 'numeric', minute: '2-digit' });
+const label = (i: { en: string; ar: string }, lang: Lang) => (pick(i, lang));
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Line chart of strength (0–10) over time, one line per symptom. Readable as a table too. */
@@ -107,7 +108,7 @@ export function PatientDiary() {
     setMicErr('');
     if (listening) { listener.stop(); return; }
     const r = await listener.listen(lang, 12000);
-    if ('error' in r) { if (r.error !== 'aborted') setMicErr(ERROR_TEXT[r.error][lang === 'ar' ? 'ar' : 'en']); return; }
+    if ('error' in r) { if (r.error !== 'aborted') setMicErr(errText(r.error, lang)); return; }
     setText((t) => (t ? `${t} ${r.text}` : r.text)); setVia('voice');
   };
 
@@ -266,7 +267,7 @@ export function DoctorProgress() {
                 <div className="grow">
                   <b data-no-tr>{p.profile.fullName}</b>
                   <div className="small muted">{entries.length ? `${entries.length} ${tr('check-ins', 'تسجيل', lang)} · ${tr('last', 'آخر واحد', lang)} ${fmtDay(entries[0].at, lang)}` : tr('No shared check-ins yet', 'مفيش تسجيلات متشاركة لسه', lang)}</div>
-                  {top && <div className={`small ${top.level === 'urgent' ? 'danger-text' : top.level === 'attention' ? 'warn-text' : 'muted'}`} data-no-tr>{lang === 'ar' ? top.ar : top.en}</div>}
+                  {top && <div className={`small ${top.level === 'urgent' ? 'danger-text' : top.level === 'attention' ? 'warn-text' : 'muted'}`} data-no-tr>{pick(top, lang)}</div>}
                 </div>
                 {score(s) > 0 && <span className={`status ${score(s) >= 100 ? 'urgent-chip' : 'warn-chip'}`}>{score(s) >= 100 ? tr('Urgent', 'طارئ', lang) : tr('Attention', 'انتبه', lang)}</span>}
                 <LuChevronRight className="chev" aria-hidden />
@@ -312,7 +313,7 @@ export function DoctorPatientProgress({ id }: { id: string }) {
             {s.lines.length ? (
               <ul className="change-list" data-testid="changes">{s.lines.map((l) => (
                 <li key={l.id} className={`change ${l.level}`}>
-                  <span data-no-tr>{lang === 'ar' ? l.ar : l.en}</span>
+                  <span data-no-tr>{pick(l, lang)}</span>
                   <span className="refs">{l.refs.map((r) => <span key={r} className="ref-chip">{r}</span>)}</span>
                 </li>
               ))}</ul>

@@ -3,6 +3,13 @@
 // tell the patient they are safe.
 
 import type { Sensation, SymptomDetails } from '../domain/types';
+import { safetyReasons } from './langWords';
+
+/** the same warning signs said in French, Urdu or Hindi (langWords.ts) */
+const MORE_REASON: Record<string, string> = {
+  'chest pain or pressure': 'chest pressure or pain was mentioned', 'difficulty breathing': 'difficulty breathing was mentioned', fainting: 'fainting was mentioned',
+  'face or speech changes': 'face or speech changes were mentioned', 'a sudden, very severe headache': 'a sudden severe headache was mentioned', 'thoughts of self-harm': 'thoughts of self-harm were mentioned', 'heavy bleeding': 'heavy bleeding was mentioned',
+};
 
 /** Shown as one-tap checkboxes before (and at any point during) a consultation. */
 export const RED_FLAG_CHECKS = [
@@ -63,8 +70,9 @@ export function assessSafety(input: {
   }
   const text = [input.details.description, input.details.otherSensation].filter(Boolean).join(' ');
   for (const k of KEYWORDS) if (k.re.test(text)) reasons.push(k.reason);
+  for (const r of safetyReasons(text)) reasons.push(MORE_REASON[r] ?? r);
 
-  const sudden = /sudden|just now|right now|minutes ago/i.test(text) || /just now|today/i.test(input.details.onset ?? '');
+  const sudden = /sudden|just now|right now|minutes ago|soudain|tout à coup|tout a coup|brusquement|اچانک|ابھی|अचानक|अभी/i.test(text) || /just now|today/i.test(input.details.onset ?? '');
   if (sudden && input.sensations.some((s) => s === 'weakness' || s === 'numbness')) {
     reasons.push('new weakness or numbness that started recently');
   }

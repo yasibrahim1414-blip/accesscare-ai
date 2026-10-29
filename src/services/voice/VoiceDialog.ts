@@ -1,7 +1,7 @@
 // AccessCare Voice Companion — the conversation engine (UI-independent, testable).
 //
 // What it does: runs Blind Mode's menus (account, doctor, messages, settings),
-// understands answers by matching words in English or Arabic, handles
+// understands answers by matching words in English, Arabic, French, Urdu or Hindi, handles
 // "repeat", "back", "help", "menu" and urgent words, and asks the app to
 // perform actions (sign up, send a report, read messages…) through `effects`.
 //
@@ -12,6 +12,9 @@
 // in a menu don't match an option, the app may ask Claude to interpret them;
 // the interpretation is read back and needs a "yes" before it counts.
 
+import { dateLocale, tr, listSep, LANGS } from '../../i18n/lang';
+import { norm as lexNorm } from '../conversation/lexicon';
+import { HELP_NOW } from '../langWords';
 import { assessSafety } from '../safety';
 import type { VoiceLang } from '../../domain/voice';
 import type { ConsultRecord, Via } from '../../domain/conversation';
@@ -70,7 +73,7 @@ export type Effect =
   | { type: 'converse'; input: ConsultInput }
   | { type: 'send_report'; toDoctor: boolean }
   | { type: 'load_messages' } | { type: 'send_reply'; cid: string; text: string } | { type: 'load_doctor' }
-  | { type: 'settings'; change: 'faster' | 'slower' | 'normal' | 'lang_en' | 'lang_ar' | 'brief' | 'full' | 'gestures_on' | 'gestures_off' | 'reset' }
+  | { type: 'settings'; change: 'faster' | 'slower' | 'normal' | 'lang_en' | 'lang_ar' | 'lang_fr' | 'lang_ur' | 'lang_hi' | 'brief' | 'full' | 'gestures_on' | 'gestures_off' | 'reset' }
   | { type: 'logout' } | { type: 'open_signal' } | { type: 'listen' } | { type: 'nomatch'; text: string; options: Option[] };
 
 export type Input =
@@ -87,7 +90,7 @@ export type Input =
 export interface Turn { state: DialogState; say: string[]; options: Option[]; effects: Effect[]; listen: boolean }
 
 // ---------------------------------------------------------------- vocabulary
-type Lex = Record<string, { en: string[]; ar: string[] }>;
+type Lex = Record<string, { en: string[]; ar: string[]; fr?: string[]; ur?: string[]; hi?: string[] }>;
 /** words that select an option; matched as whole words / phrases in the patient's utterance */
 const LEX: Lex = {
   yes: { en: ['yes', 'yeah', 'yep', 'correct', 'right', 'sure', 'okay', 'ok', 'that is right', "that's right", 'confirm', 'send it', 'go ahead'], ar: ['نعم', 'ايوه', 'أيوه', 'ايوة', 'أيوة', 'اه', 'آه', 'أه', 'تمام', 'صح', 'مظبوط', 'موافق', 'ماشي', 'اكيد', 'أكيد', 'اوك', 'أرسل', 'ابعت'] },
@@ -133,23 +136,74 @@ const LEX: Lex = {
   set_reset: { en: ['reset', 'defaults', 'restore defaults'], ar: ['الافتراضي', 'رجع الإعدادات', 'إعادة الضبط'] },
 };
 
+// French, Urdu and Hindi words (Urdu and Hindi also in Roman letters, as many people type them)
+const LEX_MORE: Record<string, { fr: string[]; ur: string[]; hi: string[] }> = {
+  yes: { fr: ['oui', 'ouais', "d'accord", 'ok', 'exact', "c'est ça", "c'est bien ça", 'bien sûr', 'confirmer', 'vas-y', 'envoie'], ur: ['ہاں', 'جی', 'جی ہاں', 'ٹھیک', 'ٹھیک ہے', 'صحیح', 'درست', 'بالکل', 'اوکے', 'بھیج دو', 'haan', 'han', 'ji', 'theek hai'], hi: ['हां', 'जी', 'जी हां', 'ठीक', 'ठीक है', 'सही', 'बिल्कुल', 'ओके', 'भेज दो', 'haan', 'han', 'ji', 'theek hai'] },
+  no: { fr: ['non', 'pas du tout', 'faux', 'incorrect', 'annuler', "ce n'est pas ça"], ur: ['نہیں', 'نہ', 'جی نہیں', 'غلط', 'منسوخ', 'nahi', 'nahin', 'na'], hi: ['नहीं', 'ना', 'जी नहीं', 'गलत', 'रद्द', 'nahi', 'nahin', 'na'] },
+  skip: { fr: ['passer', 'question suivante', 'sauter'], ur: ['چھوڑ دو', 'اگلا سوال', 'آگے'], hi: ['छोड़ दो', 'अगला सवाल', 'आगे'] },
+  repeat: { fr: ['répète', 'répéter', 'répétez', 'encore', 'redis', 'tu peux répéter', 'vous pouvez répéter', 'pardon'], ur: ['دوبارہ', 'پھر سے', 'دہراؤ', 'دوبارہ بولو', 'کیا کہا'], hi: ['दोबारा', 'फिर से', 'दोहराओ', 'दोबारा बोलो', 'क्या कहा'] },
+  back: { fr: ['retour', 'revenir', 'en arrière', 'précédent'], ur: ['واپس', 'پیچھے', 'پچھلا'], hi: ['वापस', 'पीछे', 'पिछला'] },
+  help: { fr: ['aide', 'aidez-moi', "qu'est-ce que je peux dire", 'options', 'mes options'], ur: ['مدد', 'میری مدد کرو', 'کیا کہوں', 'آپشن'], hi: ['मदद', 'मेरी मदद करो', 'क्या बोलूं', 'विकल्प'] },
+  menu: { fr: ['menu', 'menu principal', 'accueil', 'recommencer'], ur: ['مینو', 'مین مینو', 'شروع سے'], hi: ['मेन्यू', 'मेनू', 'मुख्य मेनू', 'शुरू से'] },
+  continue: { fr: ['continuer', 'continue', 'suivant', "c'est fait", 'terminé'], ur: ['جاری رکھو', 'آگے چلو', 'ہو گیا'], hi: ['जारी रखो', 'आगे चलो', 'हो गया', 'आगे बढ़ो'] },
+  save: { fr: ['enregistrer', 'sauvegarder', 'garder', 'télécharger'], ur: ['محفوظ کرو', 'محفوظ', 'سیو'], hi: ['सेव', 'सेव करो', 'सहेजो'] },
+  slow: { fr: ['lentement', 'épeler', 'épelle'], ur: ['آہستہ', 'ہجے', 'ایک ایک حرف'], hi: ['धीरे', 'धीरे धीरे', 'एक एक अक्षर'] },
+  new_consult: { fr: ['nouvelle consultation', 'consultation', 'symptôme', 'symptômes', 'je ne me sens pas bien', "j'ai mal", 'douleur', 'commencer'], ur: ['نئی مشاورت', 'مشاورت', 'علامات', 'طبیعت خراب', 'درد', 'تکلیف', 'شروع'], hi: ['नया परामर्श', 'नई सलाह', 'परामर्श', 'लक्षण', 'तबीयत खराब', 'दर्द', 'तकलीफ', 'शुरू'] },
+  messages: { fr: ['messages', 'message', 'boîte de réception', 'réponse du médecin'], ur: ['پیغامات', 'پیغام', 'میسج', 'ڈاکٹر کا جواب'], hi: ['संदेश', 'मैसेज', 'डॉक्टर का जवाब'] },
+  doctor: { fr: ['mon médecin', 'médecin', 'docteur', 'statut'], ur: ['میرا ڈاکٹر', 'ڈاکٹر', 'حالت'], hi: ['मेरे डॉक्टर', 'डॉक्टर', 'स्थिति'] },
+  my_id: { fr: ['mon identifiant', 'identifiant patient', 'mon numéro', 'compte'], ur: ['میری آئی ڈی', 'مریض آئی ڈی', 'میرا نمبر', 'اکاؤنٹ'], hi: ['मेरी आईडी', 'मरीज आईडी', 'मेरा नंबर', 'खाता'] },
+  settings: { fr: ['paramètres', 'réglages', 'vitesse', 'langue', 'voix'], ur: ['ترتیبات', 'سیٹنگز', 'رفتار', 'زبان', 'آواز'], hi: ['सेटिंग्स', 'सेटिंग', 'गति', 'रफ्तार', 'भाषा', 'आवाज'] },
+  logout: { fr: ['se déconnecter', 'déconnexion', 'déconnecte-moi', 'quitter'], ur: ['لاگ آؤٹ', 'سائن آؤٹ', 'باہر نکلو'], hi: ['लॉग आउट', 'साइन आउट', 'बाहर निकलो'] },
+  new_account: { fr: ['nouveau compte', 'créer un compte', 'créer', "s'inscrire", 'inscription', 'nouveau'], ur: ['نیا اکاؤنٹ', 'اکاؤنٹ بناؤ', 'رجسٹر', 'نیا'], hi: ['नया खाता', 'नया अकाउंट', 'खाता बनाओ', 'रजिस्टर', 'नया'] },
+  login: { fr: ['se connecter', 'connexion', "j'ai un compte", 'connecter'], ur: ['لاگ ان', 'سائن ان', 'میرا اکاؤنٹ ہے'], hi: ['लॉग इन', 'साइन इन', 'मेरा खाता है'] },
+  recover: { fr: ['mot de passe oublié', 'oublié', 'récupérer', 'réinitialiser'], ur: ['پاس ورڈ بھول گیا', 'پاس ورڈ بھول گئی', 'بھول گیا', 'بھول گئی'], hi: ['पासवर्ड भूल गया', 'पासवर्ड भूल गई', 'भूल गया', 'भूल गई'] },
+  approve: { fr: ['approuver', "j'approuve", 'envoyer', "c'est correct", 'tout est correct', "c'est bon"], ur: ['منظور', 'بھیجو', 'سب ٹھیک ہے', 'درست ہے'], hi: ['मंजूर', 'भेजो', 'सब ठीक है', 'सही है'] },
+  change: { fr: ['modifier', 'changer', 'corriger'], ur: ['تبدیل', 'بدلو', 'درست کرو'], hi: ['बदलो', 'बदलें', 'सुधारो', 'ठीक करो'] },
+  reject: { fr: ['rejeter', 'supprimer', 'ne pas envoyer', 'effacer'], ur: ['رد کرو', 'مٹا دو', 'مت بھیجو'], hi: ['अस्वीकार', 'मिटा दो', 'मत भेजो', 'हटाओ'] },
+  next: { fr: ['suivant', 'message suivant'], ur: ['اگلا', 'اگلا پیغام'], hi: ['अगला', 'अगला संदेश'] },
+  previous: { fr: ['précédent', 'message précédent'], ur: ['پچھلا', 'پچھلا پیغام'], hi: ['पिछला', 'पिछला संदेश'] },
+  reply: { fr: ['répondre', 'réponse'], ur: ['جواب', 'جواب دو'], hi: ['जवाब', 'जवाब दो', 'उत्तर'] },
+  set_faster: { fr: ['plus vite', 'parle plus vite'], ur: ['تیز', 'تیز بولو'], hi: ['तेज', 'तेज बोलो'] },
+  set_slower: { fr: ['plus lentement', 'moins vite', 'parle plus lentement'], ur: ['آہستہ بولو', 'آہستہ'], hi: ['धीरे बोलो', 'धीरे'] },
+  set_normal: { fr: ['vitesse normale', 'normal'], ur: ['عام رفتار', 'نارمل'], hi: ['सामान्य', 'सामान्य गति', 'नॉर्मल'] },
+  set_ar: { fr: ['arabe'], ur: ['عربی'], hi: ['अरबी'] },
+  set_en: { fr: ['anglais'], ur: ['انگریزی', 'انگلش'], hi: ['अंग्रेजी', 'इंग्लिश'] },
+  set_fr: { fr: ['français', 'francais'], ur: ['فرانسیسی', 'فرنچ'], hi: ['फ्रेंच', 'फ्रांसीसी'] },
+  set_ur: { fr: ['ourdou', 'urdu'], ur: ['اردو'], hi: ['उर्दू'] },
+  set_hi: { fr: ['hindi'], ur: ['ہندی'], hi: ['हिंदी', 'हिन्दी'] },
+  set_brief: { fr: ['bref', 'court', 'moins de paroles'], ur: ['مختصر', 'کم بات'], hi: ['संक्षेप', 'छोटा', 'कम बोलो'] },
+  set_full: { fr: ['détaillé', 'en détail', 'explique plus'], ur: ['تفصیل', 'تفصیل سے'], hi: ['विस्तार', 'विस्तार से'] },
+  set_gestures_off: { fr: ['gestes désactivés', 'désactiver les gestes', "lecteur d'écran"], ur: ['اشارے بند', 'اسکرین ریڈر'], hi: ['इशारे बंद', 'स्क्रीन रीडर'] },
+  set_gestures_on: { fr: ['gestes activés', 'activer les gestes'], ur: ['اشارے چالو'], hi: ['इशारे चालू'] },
+  set_ai: { fr: ['ia', 'intelligence artificielle', 'claude'], ur: ['مصنوعی ذہانت', 'اے آئی', 'کلاڈ'], hi: ['एआई', 'कृत्रिम बुद्धिमत्ता', 'क्लॉड'] },
+  set_reset: { fr: ['réinitialiser', 'par défaut', 'valeurs par défaut'], ur: ['ری سیٹ', 'ڈیفالٹ'], hi: ['रीसेट', 'डिफ़ॉल्ट'] },
+};
+LEX.set_fr = { en: ['french'], ar: ['فرنساوي', 'فرنسي', 'الفرنسية', 'الفرنساوي'] };
+LEX.set_ur = { en: ['urdu'], ar: ['أوردو', 'اوردو', 'الأوردية'] };
+LEX.set_hi = { en: ['hindi'], ar: ['هندي', 'الهندية', 'الهندي'] };
+for (const [k, v] of Object.entries(LEX_MORE)) if (LEX[k]) Object.assign(LEX[k], v);
+
 const AR_DIGITS: Record<string, string> = { '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9' };
 const NUMBER_WORDS: Record<string, number> = {
   zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  'zéro': 0, un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, sept: 7, huit: 8, neuf: 9, dix: 10,
+  'ایک': 1, 'دو': 2, 'تین': 3, 'چار': 4, 'پانچ': 5, 'چھ': 6, 'سات': 7, 'آٹھ': 8, 'نو': 9, 'دس': 10,
+  'शून्य': 0, 'एक': 1, 'दो': 2, 'तीन': 3, 'चार': 4, 'पांच': 5, 'छह': 6, 'छः': 6, 'सात': 7, 'आठ': 8, 'नौ': 9, 'दस': 10,
   'صفر': 0, 'واحد': 1, 'اتنين': 2, 'اثنين': 2, 'تلاتة': 3, 'ثلاثة': 3, 'اربعة': 4, 'أربعة': 4, 'خمسة': 5, 'ستة': 6, 'سبعة': 7, 'تمانية': 8, 'ثمانية': 8, 'تسعة': 9, 'عشرة': 10,
 };
 
+/** lower case, letter variants unified (Arabic, French accents, Hindi spellings), digits 0-9 — see lexicon.norm */
 export function normalize(text: string): string {
-  return ` ${text.toLowerCase().replace(/[٠-٩]/g, (d) => AR_DIGITS[d]).replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
-    .replace(/[^\p{L}\p{N}' ]+/gu, ' ').replace(/\s+/g, ' ').trim()} `;
+  return ` ${lexNorm(text)} `;
 }
+void AR_DIGITS;
 const norm1 = (w: string) => normalize(w).trim();
 
 /** Score of how well an utterance matches a lexicon entry (longest phrase wins). 0 = no match. */
 function score(utt: string, key: string): number {
   const e = LEX[key]; if (!e) return 0;
   let best = 0;
-  for (const w of [...e.en, ...e.ar]) {
+  for (const w of [...e.en, ...e.ar, ...(e.fr ?? []), ...(e.ur ?? []), ...(e.hi ?? [])]) {
     const n = norm1(w);
     if (n && utt.includes(` ${n} `)) best = Math.max(best, n.length);
   }
@@ -228,7 +282,7 @@ const S: Str = {
   doctor_is: { en: 'Your doctor is {name}.', ar: 'دكتورك هو {name}.' },
   doctor_none: { en: 'You are not connected to a doctor yet.', ar: 'انت لسه مش مربوط بدكتور.' },
   status_line: { en: 'Your latest consultation: {status}.', ar: 'آخر استشارة ليك: {status}.' },
-  settings_q: { en: 'Settings. Say faster, slower, normal speed, Arabic, English, brief, detailed, gestures off, gestures on, or reset. Say main menu when done.', ar: 'الإعدادات. قول أسرع، أو أبطأ، أو عادي، أو عربي، أو إنجليزي، أو مختصر، أو بالتفصيل، أو اقفل الإشارات، أو شغل الإشارات، أو الافتراضي. وقول القائمة لما تخلص.' },
+  settings_q: { en: 'Settings. Say faster, slower, normal speed, brief, detailed, gestures off, gestures on, or reset. To change the language, say its name: English, Arabic, French, Urdu or Hindi. Say main menu when done.', ar: 'الإعدادات. قول أسرع، أو أبطأ، أو عادي، أو مختصر، أو بالتفصيل، أو اقفل الإشارات، أو شغل الإشارات، أو الافتراضي. ولو عايز تغيّر اللغة قول اسمها: إنجليزي، عربي، فرنساوي، أوردو، أو هندي. وقول القائمة لما تخلص.' },
   settings_done: { en: 'Done.', ar: 'تمام.' },
   logout_q: { en: 'Log out of AccessCare on this device? Say yes or no.', ar: 'تسجل خروج من أكسس كير على الجهاز ده؟ قول نعم أو لا.' },
   logged_out: { en: 'You are logged out.', ar: 'تم تسجيل الخروج.' },
@@ -242,12 +296,14 @@ const S: Str = {
 };
 
 export function t(key: string, lang: VoiceLang, vars: Record<string, string | number> = {}): string {
-  let s = S[key]?.[lang] ?? S[key]?.en ?? key;
-  for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v));
-  return s;
+  const e = S[key];
+  if (!e) return key;
+  return tr(e.en, e.ar, lang, vars);
 }
+/** every spoken text of the dialog (for the translation check) */
+export const DIALOG_TEXTS = (): { en: string; ar: string }[] => Object.values(S);
 
-const L = (lang: VoiceLang, en: string, ar: string) => (lang === 'ar' ? ar : en);
+const L = (lang: VoiceLang, en: string, ar: string) => tr(en, ar, lang);
 
 /** "AC-PAT-7K4P9X" → "A C. P A T. 7 K 4. P 9 X." — short groups, read one character at a time (slow = longer pauses). */
 export function spell(code: string, _lang: VoiceLang, slow = false): string {
@@ -289,7 +345,7 @@ export function optionsFor(st: DialogState, ctx: Ctx): Option[] {
     case 'messages': return [{ id: 'next', label: L(l, 'Next message', 'الرسالة اللي بعدها') }, { id: 'previous', label: L(l, 'Previous message', 'اللي قبلها') }, ...(st.messages.length ? [{ id: 'reply', label: L(l, 'Reply', 'رد') }] : []), { id: 'menu', label: L(l, 'Main menu', 'القائمة') }];
     case 'reply': return [{ id: 'menu', label: L(l, 'Cancel', 'إلغاء') }];
     case 'settings': return [{ id: 'set_faster', label: L(l, 'Speak faster', 'أسرع') }, { id: 'set_slower', label: L(l, 'Speak slower', 'أبطأ') }, { id: 'set_normal', label: L(l, 'Normal speed', 'سرعة عادية') },
-      { id: st.lang === 'ar' ? 'set_en' : 'set_ar', label: st.lang === 'ar' ? 'English' : 'العربية' },
+      ...LANGS.filter((x) => x.id !== st.lang).map((x) => ({ id: `set_${x.id}`, label: x.native })),
       { id: 'set_brief', label: L(l, 'Brief guidance', 'كلام مختصر') }, { id: 'set_full', label: L(l, 'Detailed guidance', 'بالتفصيل') },
       { id: 'set_gestures_off', label: L(l, 'Gestures off (use my screen reader)', 'اقفل الإشارات') }, { id: 'set_gestures_on', label: L(l, 'Gestures on', 'شغل الإشارات') },
       ...(ctx.aiSupported ? [{ id: 'set_ai', label: ctx.aiOn ? L(l, 'AI assistance: on', 'الذكاء الاصطناعي: شغال') : L(l, 'Turn on AI assistance', 'شغّل الذكاء الاصطناعي') }] : []),
@@ -334,7 +390,7 @@ const questionFor = (st: DialogState, ctx: Ctx): string[] => {
 function readMessage(st: DialogState): string {
   const m = st.messages[st.msgIndex];
   if (!m) return '';
-  const when = new Date(m.at).toLocaleString(st.lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'long', hour: 'numeric', minute: '2-digit' });
+  const when = new Date(m.at).toLocaleString(dateLocale(st.lang), { weekday: 'long', hour: 'numeric', minute: '2-digit' });
   return t('msg_read', st.lang, { from: m.from === 'doctor' ? L(st.lang, 'your doctor', 'دكتورك') : L(st.lang, 'you', 'انت'), when, body: m.body });
 }
 
@@ -345,8 +401,8 @@ export function summaryLines(st: DialogState, lang: VoiceLang = st.lang): string
 
 const urgentCheck = (text: string, st: DialogState): string[] => {
   const r = assessSafety({ regionIds: [], sensations: [], details: { description: text } });
-  const words = /\b(help me now|emergency|i need help now|call (an )?ambulance)\b/i.test(text) || /(الحقوني|طوارئ|إسعاف|اسعاف|محتاج مساعدة دلوقتي)/.test(text);
-  return [...(words ? [L(st.lang, 'you need help now', 'انت محتاج مساعدة دلوقتي')] : []), ...r.reasons];
+  const words = HELP_NOW.test(text) || HELP_NOW.test(lexNorm(text));
+  return [...(words ? [L(st.lang, 'you need help now', 'انت محتاج مساعدة دلوقتي')] : []), ...r.reasons].map((x) => (st.lang === 'en' || st.lang === 'ar' ? x : tr(x, x, st.lang)));
 };
 
 
@@ -390,7 +446,7 @@ export function step(prev: DialogState, input: Input, ctx: Ctx): Turn {
       case 'doctor_info': say.push(d.name ? t('doctor_is', l(), { name: String(d.name) }) : t('doctor_none', l()));
         if (d.status) say.push(t('status_line', l(), { status: String(d.status) }));
         go('menu', []); say.splice(say.length - 1, 1, t('menu_q_brief', l())); break;
-      case 'settings_changed': if (d.lang === 'ar' || d.lang === 'en') st.lang = d.lang; say.push(t('settings_done', l())); say.push(...questionFor(st, ctx)); break;
+      case 'settings_changed': if (LANGS.some((x) => x.id === d.lang)) st.lang = d.lang as VoiceLang; say.push(t('settings_done', l())); say.push(...questionFor(st, ctx)); break;
       case 'consult_turn': {
         const rec = d.rec as ConsultRecord; const said = (d.say as string[]) ?? []; const opts = (d.options as Option[]) ?? []; const urgent = (d.urgent as string[]) ?? [];
         st.consult = rec; st.consultOptions = opts; st.lang = rec.lang; st.consultSay = said;
@@ -480,7 +536,7 @@ export function step(prev: DialogState, input: Input, ctx: Ctx): Turn {
 
   // free-text phases
   if (!id && FREE.includes(st.phase)) {
-    if (st.phase === 'pre_name') { st.name = text.replace(/^(my name is|i am|i'm|اسمي|أنا|انا)\s+/i, '').slice(0, 80); go('pre_name_confirm'); return finish(); }
+    if (st.phase === 'pre_name') { st.name = text.replace(/^(my name is|i am|i'm|اسمي|أنا|انا|je m'appelle|je m’appelle|mon nom est|je suis|میرا نام|मेरा नाम)\s+/i, '').replace(/\s+(ہے|है)[۔.।]?$/, '').slice(0, 80); go('pre_name_confirm'); return finish(); }
     if (st.phase === 'reply') { st.replyDraft = text.slice(0, 1000); go('reply_confirm'); return finish(); }
   }
 
@@ -503,7 +559,7 @@ export function step(prev: DialogState, input: Input, ctx: Ctx): Turn {
   // ---------------------------------------------------------- helpers
   function hintNoMatch(s: DialogState, c: Ctx) {
     const opts = optionsFor(s, c).map((o) => o.label).slice(0, 7);
-    return t('nomatch_hint', s.lang, { list: opts.join(s.lang === 'ar' ? '، ' : ', ') });
+    return t('nomatch_hint', s.lang, { list: opts.join(listSep(s.lang)) });
   }
 
   function back(): Turn {
@@ -580,7 +636,7 @@ export function step(prev: DialogState, input: Input, ctx: Ctx): Turn {
       case 'settings': {
         const m: Record<string, Effect & { type: 'settings' }> = {
           set_faster: { type: 'settings', change: 'faster' }, set_slower: { type: 'settings', change: 'slower' }, set_normal: { type: 'settings', change: 'normal' },
-          set_ar: { type: 'settings', change: 'lang_ar' }, set_en: { type: 'settings', change: 'lang_en' }, set_brief: { type: 'settings', change: 'brief' }, set_full: { type: 'settings', change: 'full' },
+          set_ar: { type: 'settings', change: 'lang_ar' }, set_en: { type: 'settings', change: 'lang_en' }, set_fr: { type: 'settings', change: 'lang_fr' }, set_ur: { type: 'settings', change: 'lang_ur' }, set_hi: { type: 'settings', change: 'lang_hi' }, set_brief: { type: 'settings', change: 'brief' }, set_full: { type: 'settings', change: 'full' },
           set_gestures_off: { type: 'settings', change: 'gestures_off' }, set_gestures_on: { type: 'settings', change: 'gestures_on' }, set_reset: { type: 'settings', change: 'reset' },
         };
         if (choice === 'set_ai' && ctx.aiSupported) { go('ai_consent'); break; }

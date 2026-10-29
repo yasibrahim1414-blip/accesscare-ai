@@ -5,6 +5,7 @@
 // on-device), and only the resulting text is used.
 
 import type { VoiceLang } from '../../domain/voice';
+import { tr } from '../../i18n/lang';
 
 export type SpeechErr = 'unsupported' | 'not-allowed' | 'no-speech' | 'audio-capture' | 'network' | 'aborted' | 'language-not-supported' | 'other';
 
@@ -19,9 +20,12 @@ export const ERROR_TEXT: Record<SpeechErr, { en: string; ar: string }> = {
   other: { en: 'Speech recognition failed. Please try again or use the buttons.', ar: 'التعرف على الكلام فشل. جرّب تاني أو استخدم الزراير.' },
 };
 
+/** a speech error message in the language */
+export const errText = (e: SpeechErr, lang: VoiceLang) => tr(ERROR_TEXT[e].en, ERROR_TEXT[e].ar, lang);
+
 // Apple's speech service knows Saudi Arabic, Google's also Egyptian Arabic
 const apple = typeof navigator !== 'undefined' && /iPhone|iPad|Macintosh/.test(navigator.userAgent) && !/Chrome|CriOS/.test(navigator.userAgent);
-const LOCALE: Record<VoiceLang, string> = { en: 'en-US', ar: apple ? 'ar-SA' : 'ar-EG' };
+export const LOCALE: Record<VoiceLang, string> = { en: 'en-US', ar: apple ? 'ar-SA' : 'ar-EG', fr: 'fr-FR', ur: 'ur-PK', hi: 'hi-IN' };
 
 type Rec = {
   lang: string; interimResults: boolean; maxAlternatives: number; continuous: boolean;
@@ -48,6 +52,9 @@ const POOR = /\b(albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jeste
 const GOOD: Record<VoiceLang, RegExp[]> = {
   ar: [/\b(salma|shakir)\b.*online|online.*\b(salma|shakir)\b/i, /online \(natural\)/i, /google/i, /\bmajed\b|\bmaged\b/i, /\b(laila|mariam|tarik|hoda|naayf|zariyah|hamed)\b/i],
   en: [/\b(ava|jenny|aria|guy)\b.*online|online \(natural\)/i, /google us english/i, /\b(samantha|ava|allison|susan|nicky|tom|alex)\b/i, /google uk english/i, /\b(daniel|karen|moira|tessa|serena|kate)\b/i],
+  fr: [/\b(denise|henri|vivienne|remy|eloise)\b.*online|online \(natural\)/i, /google fran[cç]ais/i, /\b(am[eé]lie|thomas|audrey|aur[eé]lie|marie|julie|paul)\b/i],
+  ur: [/\b(uzma|asad|gul|salman)\b.*online|online \(natural\)/i, /google/i, /\b(uzma|asad)\b/i],
+  hi: [/\b(swara|madhur)\b.*online|online \(natural\)/i, /google (हिन्दी|hindi)/i, /\b(lekha|kalpana|hemant|rishi|neel|swara)\b/i],
 };
 const quality = (v: SpeechSynthesisVoice) => (/premium/i.test(v.name) ? 2 : /enhanced|neural|natural/i.test(v.name) ? 1 : 0);
 
@@ -100,9 +107,13 @@ export function speechChunks(sentences: string[]): string[] {
   }
   return out;
 }
-const langOfText = (t: string, fallback: VoiceLang): VoiceLang => {
-  const ar = (t.match(/[؀-ۿ]/g) ?? []).length; const en = (t.match(/[A-Za-z]/g) ?? []).length;
-  return ar === 0 && en === 0 ? fallback : ar >= en ? 'ar' : 'en';
+/** which voice should read a sentence: by its script, staying in the conversation's language when the script fits it */
+export const langOfText = (t: string, fallback: VoiceLang): VoiceLang => {
+  const ar = (t.match(/[؀-ۿ]/g) ?? []).length; const de = (t.match(/[ऀ-ॿ]/g) ?? []).length; const la = (t.match(/[A-Za-zÀ-ÿ]/g) ?? []).length;
+  if (!ar && !de && !la) return fallback;
+  if (de >= ar && de >= la) return 'hi';
+  if (ar >= la) return fallback === 'ur' || /[ٹڈڑںھہۂیےۓکگپچژ]/.test(t) ? 'ur' : 'ar';
+  return fallback === 'fr' ? 'fr' : 'en';
 };
 
 // ---------------------------------------------------------------- natural (server) voice
@@ -146,7 +157,7 @@ function fetchAudio(text: string, lang: VoiceLang, rate: number): Promise<string
   return p;
 }
 
-export interface SpeakOpts { lang: VoiceLang; rate: number; voice?: string; voiceAr?: string; voiceEn?: string; engine?: 'natural' | 'device' }
+export interface SpeakOpts { lang: VoiceLang; rate: number; voice?: string; voiceAr?: string; voiceEn?: string; voices?: Partial<Record<VoiceLang, string>>; engine?: 'natural' | 'device' }
 
 /** Speaks queued sentences; can pause, resume, stop and repeat. One voice at a time, never overlapping. */
 export class Speaker {
@@ -163,7 +174,7 @@ export class Speaker {
   speak(sentences: string[], opts: SpeakOpts): Promise<void> {
     const chunks = speechChunks(sentences);
     if (!chunks.length) return Promise.resolve();
-    const natural = opts.engine !== 'device' && naturalVoice.available === true && !!naturalVoice.url && naturalVoice.langs.includes(opts.lang); // an older worker speaks English only
+    const natural = opts.engine !== 'device' && naturalVoice.available === true && !!naturalVoice.url && naturalVoice.langs.includes(opts.lang); // an older worker speaks fewer languages
     if (!natural && !ttsAvailable()) return Promise.resolve();
     const wasBusy = ttsAvailable() && (speechSynthesis.speaking || speechSynthesis.pending);
     this.stop();
@@ -179,7 +190,7 @@ export class Speaker {
         if (i >= chunks.length) return finish();
         const text = chunks[i++];
         const lang = langOfText(text, opts.lang);
-        const voice = bestVoice(lang, lang === 'ar' ? (opts.voiceAr ?? (opts.lang === 'ar' ? opts.voice : undefined)) : (opts.voiceEn ?? (opts.lang === 'en' ? opts.voice : undefined)));
+        const voice = bestVoice(lang, lang === 'ar' ? (opts.voiceAr ?? (opts.lang === 'ar' ? opts.voice : undefined)) : lang === 'en' ? (opts.voiceEn ?? (opts.lang === 'en' ? opts.voice : undefined)) : opts.voices?.[lang]);
         const u = new SpeechSynthesisUtterance(text);
         u.lang = voice?.lang ?? LOCALE[lang]; if (voice) u.voice = voice;
         u.rate = opts.rate; u.pitch = 1; u.volume = 1;

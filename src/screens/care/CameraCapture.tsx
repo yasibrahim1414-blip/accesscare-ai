@@ -73,7 +73,7 @@ export function CameraCapture({ onPhoto, facing = 'environment', purpose, busy, 
         {state !== 'on' && <div className="cam-placeholder"><LuCamera aria-hidden /><p className="small">{purpose}</p></div>}
         {state === 'on' && hint && <p className="capture-hint" role="status">{hint}</p>}
       </div>
-      {err && <p className="small danger-text" role="alert">{lang === 'ar' ? AR_ERR[err] : CAMERA_ERROR_TEXT[err]}</p>}
+      {err && <p className="small danger-text" role="alert">{tr(CAMERA_ERROR_TEXT[err], AR_ERR[err], lang)}</p>}
       <div className="cam-btns">
         {state === 'on' ? (
           <>

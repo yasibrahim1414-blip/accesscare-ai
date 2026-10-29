@@ -1,5 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { LuChevronLeft, LuInfo, LuMic, LuTriangleAlert, LuVolume2, LuCircleCheck, LuEye, LuEyeOff } from 'react-icons/lu';
+import { bestVoice, langOfText, LOCALE } from '../services/voice/Speech';
+import { getLang } from '../i18n/lang';
 import { useApp } from '../app/AppContext';
 
 /** Compact header for pushed screens. */
@@ -76,6 +78,9 @@ export function speak(text: string) {
   try {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
+    // the voice of the text's language (Arabic, Urdu, Hindi… are not read by an English voice)
+    const l = langOfText(text, getLang()); const v = bestVoice(l);
+    u.lang = v?.lang ?? LOCALE[l]; if (v) u.voice = v;
     u.rate = 0.95;
     window.speechSynthesis.speak(u);
     return true;
@@ -100,7 +105,7 @@ function MicButton({ onText }: { onText: (t: string) => void }) {
     if (!Rec) { toast('Speech input isn’t available here. Please type or use the choices.'); return; }
     try {
       const r = new Rec();
-      r.lang = navigator.language || 'en-US';
+      r.lang = getLang() === 'en' ? (navigator.language || 'en-US') : LOCALE[getLang()];
       r.interimResults = false;
       r.onresult = (e: any) => onText(Array.from(e.results).map((x: any) => x[0].transcript).join(' '));
       r.onerror = () => { setOn(false); toast('Microphone access was blocked here. Please type instead.'); };

@@ -29,7 +29,7 @@ async function bundle(define) {
 const head = `<title>AccessCare AI</title>
 <meta name="description" content="AccessCare AI — The Adaptive Digital Clinic (prototype)">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap">`;
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@400;500;700&family=Noto+Nastaliq+Urdu:wght@400;700&family=Noto+Sans+Devanagari:wght@400;700&display=swap">`;
 
 // In-Claude build: no Supabase (external servers are unreachable from Claude's preview).
 const jsClaude = await bundle({ __SUPABASE_URL__: '""', __SUPABASE_ANON_KEY__: '""', __AI_ENDPOINT__: '""' });

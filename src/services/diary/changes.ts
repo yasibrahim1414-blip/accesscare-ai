@@ -3,6 +3,7 @@
 // (D1, D2 … oldest first, C1 … for shared reports). AI may only reword the
 // facts into a short summary; each AI line must cite real references, may not add
 // numbers that are not in the facts, and may not diagnose or advise.
+import { dateLocale } from '../../i18n/lang';
 import type { DiaryEntry, DiaryItem, Trend } from '../../domain/diary';
 import { PROMPT_PREFIX } from '../clinical/engine';
 
@@ -18,7 +19,7 @@ export interface ChangeSummary {
 
 const DAY = 86400_000;
 const days = (a: string, b: string) => Math.round((new Date(b).getTime() - new Date(a).getTime()) / DAY);
-const d = (iso: string, lang: 'en' | 'ar') => new Date(iso).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short' });
+const d = (iso: string, lang: string) => new Date(iso).toLocaleDateString(dateLocale(lang), { day: 'numeric', month: 'short' });
 const keyOf = (i: DiaryItem) => (i.concept === 'pain' || i.concept === 'other' ? `${i.concept}:${i.en.toLowerCase()}` : i.concept);
 
 export function whatChanged(entriesIn: DiaryEntry[], reports: { id: string; at: string; status: string }[] = [], nowIso = new Date().toISOString()): ChangeSummary {

@@ -286,7 +286,7 @@ export function cleanReview(r: unknown, consultationId: string): ClinicalReview 
 }
 
 // ---------------------------------------------------------------- follow-up after treatment
-export type FollowLang = 'en' | 'ar';
+export type FollowLang = import('../i18n/lang').Lang;
 export const SIDE_EFFECTS: { id: string; en: string; ar: string }[] = [
   { id: 'swelling', en: 'Swelling of the lips, face, tongue or throat', ar: 'تورم في الشفايف أو الوش أو اللسان أو الزور' },
   { id: 'breathing', en: 'Trouble breathing or a tight throat', ar: 'صعوبة في التنفس أو زوري مقفول' },

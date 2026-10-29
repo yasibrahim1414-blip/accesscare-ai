@@ -20,6 +20,9 @@ import {
   BODY, CONCEPTS, CONCEPT_BY_ID, CUES, LOCATIONS, ONSET, ONSET_TYPE, PATTERN, SENSATIONS, SEVERITY, SIDE,
   findAny, negatedAt, norm, tokensOf, misspelledConcept, misspelledBody, type AreaId, type Concept, type ValueWord,
 } from './lexicon';
+import { tr, listSep, colon } from '../../i18n/lang';
+import { translateTo } from '../../i18n/dict';
+import { safetyReasons } from '../langWords';
 
 export type ConsultInput =
   | { kind: 'text'; text: string; via: Via }
@@ -38,19 +41,37 @@ export interface ConsultTurn {
   ai: boolean;
 }
 
-const L = (lang: ConsultLang, en: string, ar: string) => (lang === 'ar' ? ar : en);
+const L = (lang: ConsultLang, en: string, ar: string, vars?: Record<string, string | number>) => tr(en, ar, lang, vars);
+/** French, Urdu, Hindi: worded from the dictionaries (English and Arabic keep their own grammar below) */
+const isDict = (l: ConsultLang): l is 'fr' | 'ur' | 'hi' => l === 'fr' || l === 'ur' || l === 'hi';
+/** an English word or phrase of the app (symptom, value) in the language; the English when there is no entry */
+const inLang = (en: string, ar: string, l: ConsultLang) => (l === 'ar' ? ar : l === 'en' ? en : translateTo(en, l) ?? en);
+const lowerFirst = (s: string, l: ConsultLang) => (l === 'fr' || l === 'en' ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 const clone = (r: ConsultRecord): ConsultRecord => JSON.parse(JSON.stringify(r));
 
 export function newRecord(lang: ConsultLang): ConsultRecord {
   return { v: 1, lang, complaints: [], denied: [], notes: [], corrections: [], urgent: [], turns: [], pending: null, misses: 0, ai: { used: 0, failed: 0 }, anythingElseAsked: false };
 }
 
-/** Detects Arabic vs English from the patient's words (null when unclear). */
-export function detectLang(text: string): ConsultLang | null {
-  const ar = (text.match(/[؀-ۿ]/g) ?? []).length;
-  const en = (text.match(/[A-Za-z]/g) ?? []).length;
-  if (ar === 0 && en === 0) return null;
-  return ar >= en ? 'ar' : 'en';
+/**
+ * The language of the patient's words (null when unclear). Script decides Arabic/Urdu,
+ * Hindi and Latin; Latin text stays in French, Urdu or Hindi when the conversation is in
+ * one of them (Roman Urdu/Hindi), and switches between English and French only on clear words.
+ */
+export function detectLang(text: string, current: ConsultLang = 'en'): ConsultLang | null {
+  const arab = (text.match(/[؀-ۿ]/g) ?? []).length;
+  const deva = (text.match(/[ऀ-ॿ]/g) ?? []).length;
+  const lat = (text.match(/[A-Za-zÀ-ÿ]/g) ?? []).length;
+  if (!arab && !deva && !lat) return null;
+  if (deva >= arab && deva >= lat) return 'hi';
+  if (arab >= lat) return /[ٹڈڑںھہۂیےۓکگپچژ]/.test(text) || current === 'ur' ? 'ur' : 'ar';
+  const n = ` ${norm(text)} `;
+  const fr = (n.match(/ (je|j'|suis|depuis|tete|ventre|douleur|j' ai|ai mal|aujourd'hui|hier|tres|oui|merci|ma|mon|mes) /g) ?? []).length;
+  const en = (n.match(/ (i|my|the|have|has|hurts|since|yes|is|it|and) /g) ?? []).length;
+  if (current === 'fr') return en >= 2 && fr === 0 ? 'en' : 'fr';
+  if (current === 'ur' || current === 'hi') return current;
+  if (fr >= 1 && fr > en) return 'fr';
+  return 'en';
 }
 
 // ---------------------------------------------------------------- understanding (rules)
@@ -66,8 +87,9 @@ export interface Understanding {
 }
 
 function origTokens(text: string): string[] {
-  return text.replace(/[^\p{L}\p{N}' ]+/gu, ' ').split(/\s+/).filter(Boolean);
+  return text.replace(/[’ʼ`]/g, "'").replace(/(^|[\s(])(qu|[ljdmnstcLJDMNSTC])'(?=\p{L})/gu, "$1$2' ").replace(/[^\p{L}\p{M}\p{N}' ]+/gu, ' ').split(/\s+/).filter(Boolean);
 }
+const wordsIn = (form: string) => norm(form).split(' ').length;
 function quoteOf(text: string, index: number, form: string): string {
   const n = norm(form).split(' ').length;
   return origTokens(text).slice(index, index + n).join(' ');
@@ -76,12 +98,12 @@ function valueHit(text: string, toks: string[], list: ValueWord[]): Hit | undefi
   let best: (Hit & { len: number }) | undefined;
   for (const v of list) {
     const h = findAny(toks, v.words);
-    if (h && !negatedAt(toks, h.index) && (!best || h.length > best.len)) best = { value: v.value, quote: quoteOf(text, h.index, h.form), index: h.index, len: h.length };
+    if (h && !negatedAt(toks, h.index, wordsIn(h.form)) && (!best || h.length > best.len)) best = { value: v.value, quote: quoteOf(text, h.index, h.form), index: h.index, len: h.length };
   }
   return best && { value: best.value, quote: best.quote, index: best.index };
 }
 
-export function understand(text: string): Understanding {
+export function understand(text: string, lang: ConsultLang = 'en'): Understanding {
   const toks = tokensOf(text);
   const has = (forms: string[]) => !!findAny(toks, forms);
   // symptoms: specific ones first; generic "pain"/"unwell" only where no specific symptom covers the words
@@ -93,18 +115,22 @@ export function understand(text: string): Understanding {
     if (!h) continue;
     const n = norm(h.form).split(' ').length;
     for (let k = h.index; k < h.index + n; k++) covered.add(k);
-    concepts.push({ value: c.id, quote: quoteOf(text, h.index, h.form), index: h.index, negated: negatedAt(toks, h.index) });
+    concepts.push({ value: c.id, quote: quoteOf(text, h.index, h.form), index: h.index, negated: negatedAt(toks, h.index, n) });
   }
-  for (const m of misspelledConcept(toks, covered)) if (!concepts.some((x) => x.value === m.id)) {
+  // spelling similarity is for English words only
+  for (const m of (lang === 'en' || lang === 'ar' ? misspelledConcept(toks, covered) : [])) if (!concepts.some((x) => x.value === m.id)) {
     for (let k = m.index; k < m.index + 1; k++) covered.add(k);
     concepts.push({ value: m.id, quote: origTokens(text)[m.index] ?? m.token, index: m.index, negated: negatedAt(toks, m.index), misspelled: true });
   }
   for (const id of ['pain', 'unwell']) {
     const h = findAny(toks, CONCEPT_BY_ID[id].words);
-    if (h && !covered.has(h.index)) concepts.push({ value: id, quote: quoteOf(text, h.index, h.form), index: h.index, negated: negatedAt(toks, h.index) });
+    if (h && !covered.has(h.index)) concepts.push({ value: id, quote: quoteOf(text, h.index, h.form), index: h.index, negated: negatedAt(toks, h.index, wordsIn(h.form)) });
   }
   const greeting = /^(hi|hello|hey|hiya|good (morning|afternoon|evening)|greetings|salam|marhaba)( there| doctor| doc)?[!. ]*$/i.test(text.trim())
-    || /^(اهلا|أهلا|اهلين|مرحبا|هاي|هالو|السلام عليكم|سلام عليكم|سلام|ازيك|إزيك|صباح الخير|مساء الخير)( يا دكتور| يا دكتوره)?[!.؟ ]*$/.test(text.trim());
+    || /^(اهلا|أهلا|اهلين|مرحبا|هاي|هالو|السلام عليكم|سلام عليكم|سلام|ازيك|إزيك|صباح الخير|مساء الخير)( يا دكتور| يا دكتوره)?[!.؟ ]*$/.test(text.trim())
+    || /^(bonjour|bonsoir|salut|coucou)( docteur| madame| monsieur)?[!. ]*$/i.test(norm(text))
+    || /^(السلام علیکم|اسلام علیکم|آداب|ہیلو|سلام|assalam o alaikum|salam)( ڈاکٹر صاحب| ڈاکٹر)?[!.؟۔ ]*$/i.test(text.trim())
+    || /^(नमस्ते|नमस्कार|हैलो|हेलो|राम राम|namaste)( डॉक्टर| डॉक्टर साहब| जी)?[!.।? ]*$/i.test(text.trim());
   // body parts (several allowed: "from my neck to my head")
   const body: Understanding['body'] = [];
   const bodyCovered = new Set<number>();
@@ -115,13 +141,14 @@ export function understand(text: string): Understanding {
     for (let k = h!.index; k < h!.index + n; k++) bodyCovered.add(k);
     body.push({ value: b.region, quote: quoteOf(text, h!.index, h!.form), index: h!.index, sided: !!b.sided, area: b.area, detail: b.detail });
   }
-  for (const m of misspelledBody(toks)) if (!bodyCovered.has(m.index) && !body.some((b) => b.value === m.word.region)) {
+  for (const m of (lang === 'en' || lang === 'ar' ? misspelledBody(toks) : [])) if (!bodyCovered.has(m.index) && !body.some((b) => b.value === m.word.region)) {
     body.push({ value: m.word.region, quote: origTokens(text)[m.index] ?? m.token, index: m.index, sided: !!m.word.sided, area: m.word.area, detail: m.word.detail, misspelled: true });
   }
   body.sort((a, z) => a.index - z.index);
   // numbers as strength: "7 out of 10", "٨ من ١٠", "seven"
   let number: Hit<number> | undefined;
-  const nm = norm(text).match(/\b(10|[0-9])\s*(out of|من|\/)\s*(10|عشره)\b/) ?? norm(text).match(/^(10|[0-9])$/);
+  const nm = norm(text).match(/\b(10|[0-9])\s*(out of|من|sur|\/)\s*(10|عشره|dix)\b/) ?? norm(text).match(/^(10|[0-9])$/)
+    ?? (() => { const m = norm(text).match(/(^|\s)(10|دس|दस)\s*(میں سے|में से)\s*(10|[0-9])(\s|$)/); return m ? Object.assign([m[0], m[4]], { index: m.index }) as unknown as RegExpMatchArray : null; })();
   if (nm) number = { value: Number(nm[1]), quote: nm[0], index: 0 };
   const sev = valueHit(text, toks, SEVERITY);
   return {
@@ -135,14 +162,30 @@ export function understand(text: string): Understanding {
 }
 
 // ---------------------------------------------------------------- labels
-const label = (c: Complaint, lang: ConsultLang) => (lang === 'ar' ? c.ar : c.en);
+function label(c: Complaint, lang: ConsultLang): string {
+  if (lang === 'ar') return c.ar;
+  if (lang === 'en') return c.en;
+  if (c.concept === 'pain' && c.regions.length) return L(lang, 'pain in the {r}', 'وجع في {r}', { r: regionWords(c.regions.map((r) => r.id), lang) });
+  const k = CONCEPT_BY_ID[c.concept];
+  if (!k) return c.en; // the patient's own words
+  return lowerFirst(translateTo(k.en, lang) ?? c.en, lang);
+}
+/** a fact (strength, time…) in the language */
+function factText(f: Fact, lang: ConsultLang): string {
+  if (lang === 'ar') return f.ar;
+  if (lang === 'en' || !isDict(lang)) return f.en;
+  if (f.value === 'other') return f.quote ?? f.en;
+  return lowerFirst(translateTo(f.en, lang) ?? f.quote ?? f.en, lang);
+}
+const slotName = (s: SlotId, lang: ConsultLang) => tr(SLOT_NAME[s].en, SLOT_NAME[s].ar, lang);
 function regionWords(ids: string[], lang: ConsultLang): string {
   const ar: Record<string, string> = { head: 'الراس', face: 'الوش', neck: 'الرقبة', chest: 'الصدر', abdomen: 'البطن', upper_back: 'الضهر من فوق', lower_back: 'الضهر من تحت', shoulder: 'الكتف', upper_arm: 'الدراع', elbow: 'الكوع', forearm: 'الساعد', wrist: 'الرسغ', hand: 'الإيد', hip: 'الورك', thigh: 'الفخد', knee: 'الركبة', lower_leg: 'الساق', ankle: 'الكاحل', foot: 'القدم' };
   return ids.map((id) => {
     const base = id.replace(/_(l|r)$/, ''); const side = id.endsWith('_l') ? 'l' : id.endsWith('_r') ? 'r' : '';
     if (lang === 'en') return (REGION_BY_ID[id]?.label ?? base.replace('_', ' ')).toLowerCase();
+    if (isDict(lang)) { const en = REGION_BY_ID[id]?.label ?? cap(base.replace('_', ' ')); return lowerFirst(translateTo(en, lang) ?? en.toLowerCase(), lang); }
     return `${ar[base] ?? base}${side === 'l' ? ' الشمال' : side === 'r' ? ' اليمين' : ''}`;
-  }).join(lang === 'ar' ? ' و' : ' and ');
+  }).join(lang === 'ar' ? ' و' : lang === 'fr' ? ' et ' : lang === 'ur' ? ' اور ' : lang === 'hi' ? ' और ' : ' and ');
 }
 function painLabel(regions: string[]): { en: string; ar: string } {
   return regions.length ? { en: `pain in the ${regionWords(regions, 'en')}`, ar: `وجع في ${regionWords(regions, 'ar')}` } : { en: 'pain', ar: 'وجع' };
@@ -203,7 +246,7 @@ const URGENT_TEXT = {
   en: 'This could need urgent medical help. Please call your local emergency number now, or ask someone near you to call. Do not wait for a reply in this app. In the UAE call 998. In Egypt call 123.',
   ar: 'ده ممكن يحتاج مساعدة طبية عاجلة. اتصل بالطوارئ دلوقتي، أو اطلب من حد جنبك يتصل. ماتستناش رد في التطبيق. في الإمارات اتصل بـ ٩٩٨، وفي مصر بـ ١٢٣.',
 };
-export function urgentText(lang: ConsultLang) { return URGENT_TEXT[lang]; }
+export function urgentText(lang: ConsultLang) { return tr(URGENT_TEXT.en, URGENT_TEXT.ar, lang); }
 
 const SAFETY_RE: { re: RegExp; reason: string }[] = [
   { re: /chest.{0,16}(pain|pressure|tight|heavy|hurt|squeez)|pressure in (my )?chest|tight(ness)? in (my )?chest/i, reason: 'chest pain or pressure' },
@@ -227,6 +270,7 @@ export function safetyCheck(rec: ConsultRecord, text: string): string[] {
   const t = norm(text);
   const reasons: string[] = [];
   for (const k of SAFETY_RE) if (k.re.test(text) || k.re.test(t)) reasons.push(k.reason);
+  reasons.push(...safetyReasons(text));
   for (const c of rec.complaints) {
     if (c.concept === 'chest_pain' || (c.concept === 'pain' && c.confirmed && c.regions.some((r) => r.id === 'chest' && r.confirmed))) reasons.push('chest pain or pressure');
     if (c.concept === 'breathing' && c.facts.severity?.value !== 'mild') reasons.push('difficulty breathing');
@@ -261,17 +305,17 @@ function slotQuestion(rec: ConsultRecord, c: Complaint, slot: SlotId): Pending |
   const base = { kind: 'slot' as const, complaint: c.id, slot };
   const ns = notSureOpt(lang);
   switch (slot) {
-    case 'onset': return { ...base, text: L(lang, `When did the ${lab} start?`, `بدأت تحس بـ${lab} إمتى؟`), options: [...ONSET.map((o) => opt(`v:${o.value}`, cap(o.en), o.ar, lang)), ns] };
+    case 'onset': return { ...base, text: L(lang, 'When did the {lab} start?', 'بدأت تحس بـ{lab} إمتى؟', { lab }), options: [...ONSET.map((o) => opt(`v:${o.value}`, cap(o.en), o.ar, lang)), ns] };
     case 'onset_type': {
-      const why = c.concept === 'headache' ? L(lang, ' I ask because a headache that starts very suddenly needs quick attention.', ' بسأل علشان الصداع اللي بييجي فجأة جامد محتاج اهتمام بسرعة.')
-        : (c.concept === 'weakness' || c.concept === 'numbness' || c.concept === 'vision' || c.concept === 'speech') ? L(lang, ' I ask because sudden changes like this need quick attention.', ' بسأل علشان التغيير المفاجئ ده محتاج اهتمام بسرعة.') : '';
-      return { ...base, text: L(lang, `Did it start suddenly, or build up gradually?${why}`, `جه فجأة، ولا زاد بالتدريج؟${why}`), options: [...ONSET_TYPE.map((o) => opt(`v:${o.value}`, cap(o.en), o.ar, lang)), ns] };
+      const why = c.concept === 'headache' ? ' ' + L(lang, 'I ask because a headache that starts very suddenly needs quick attention.', 'بسأل علشان الصداع اللي بييجي فجأة جامد محتاج اهتمام بسرعة.')
+        : (c.concept === 'weakness' || c.concept === 'numbness' || c.concept === 'vision' || c.concept === 'speech') ? ' ' + L(lang, 'I ask because sudden changes like this need quick attention.', 'بسأل علشان التغيير المفاجئ ده محتاج اهتمام بسرعة.') : '';
+      return { ...base, text: L(lang, 'Did it start suddenly, or build up gradually?', 'جه فجأة، ولا زاد بالتدريج؟') + why, options: [...ONSET_TYPE.map((o) => opt(`v:${o.value}`, cap(o.en), o.ar, lang)), ns] };
     }
     case 'location': {
       if (!c.regions.length && (!area || area === 'general')) {
         // where is it? choose an area (then the body map can refine it)
         const areas: [string, string, string][] = [['head', 'Head', 'الراس'], ['neck', 'Neck or throat', 'الرقبة أو الزور'], ['chest', 'Chest', 'الصدر'], ['abdomen', 'Belly', 'البطن'], ['upper_back', 'Back', 'الضهر'], ['arm', 'Arm or hand', 'الدراع أو الإيد'], ['leg', 'Leg or foot', 'الرجل أو القدم']];
-        return { ...base, text: L(lang, `Where do you feel the ${lab}? You can also show me on the body map.`, `بتحس بـ${lab} فين؟ وممكن توريني على صورة الجسم.`), options: [...areas.map(([id, en, ar]) => opt(`area:${id}`, en, ar, lang)), ns] };
+        return { ...base, text: L(lang, 'Where do you feel the {lab}? You can also show me on the body map.', 'بتحس بـ{lab} فين؟ وممكن توريني على صورة الجسم.', { lab }), options: [...areas.map(([id, en, ar]) => opt(`area:${id}`, en, ar, lang)), ns] };
       }
       const locs = area ? LOCATIONS[area] : undefined;
       if (!locs) return null;
@@ -281,14 +325,14 @@ function slotQuestion(rec: ConsultRecord, c: Complaint, slot: SlotId): Pending |
       return { ...base, text: q, options: [...locs.map((o) => opt(`v:${o.value}`, cap(o.en), o.ar, lang)), opt('v:other', 'Somewhere else', 'مكان تاني', lang), ns] };
     }
     case 'side': return { ...base, text: L(lang, 'Is it on your left side, your right side, or both?', 'في الناحية الشمال، ولا اليمين، ولا الاتنين؟'), options: [...SIDE.map((o) => opt(`v:${o.value}`, cap(o.en), o.ar, lang)), ns] };
-    case 'sensation': return { ...base, text: L(lang, `What does it feel like?`, 'إحساسه عامل إزاي؟'), options: [...SENSATIONS.map((o) => opt(`v:${o.value}`, cap(o.en), o.ar, lang)), opt('v:other', 'Something else', 'حاجة تانية', lang), ns] };
+    case 'sensation': return { ...base, text: L(lang, 'What does it feel like?', 'إحساسه عامل إزاي؟'), options: [...SENSATIONS.map((o) => opt(`v:${o.value}`, cap(o.en), o.ar, lang)), opt('v:other', 'Something else', 'حاجة تانية', lang), ns] };
     case 'severity': return { ...base, text: L(lang, 'How strong is it right now — mild, moderate, or severe? You can also give a number from 0 to 10.', 'قد إيه شديد دلوقتي: خفيف، متوسط، ولا شديد؟ وممكن تقول رقم من صفر لعشرة.'), options: [...SEVERITY.map((o) => opt(`v:${o.value}`, cap(o.en), o.ar, lang)), ns] };
     case 'pattern': return { ...base, text: L(lang, 'Is it there all the time, or does it come and go?', 'موجود على طول، ولا بييجي ويروح؟'), options: [...PATTERN.map((o) => opt(`v:${o.value}`, cap(o.en), o.ar, lang)), ns] };
     case 'associated': {
       const rel = (CONCEPT_BY_ID[c.concept]?.related ?? []).filter((id) => !rec.complaints.some((x) => x.concept === id) && !rec.denied.includes(id));
       if (!rel.length) return null;
-      const names = rel.map((id) => L(lang, CONCEPT_BY_ID[id].en, CONCEPT_BY_ID[id].ar));
-      return { ...base, text: L(lang, `Along with the ${lab}, do you have any of these: ${names.join(', ')}? Or none of them?`, `مع ${lab}، عندك أي حاجة من دول: ${names.join('، ')}؟ ولا مفيش؟`),
+      const names = rel.map((id) => lowerFirst(inLang(CONCEPT_BY_ID[id].en, CONCEPT_BY_ID[id].ar, lang), lang));
+      return { ...base, text: L(lang, 'Along with the {lab}, do you have any of these: {names}? Or none of them?', 'مع {lab}، عندك أي حاجة من دول: {names}؟ ولا مفيش؟', { lab, names: names.join(listSep(lang)) }),
         options: [...rel.map((id) => opt(`assoc:${id}`, cap(CONCEPT_BY_ID[id].en), CONCEPT_BY_ID[id].ar, lang)), opt('assoc:none', 'None of these', 'ولا حاجة من دول', lang), ns] };
     }
   }
@@ -311,11 +355,11 @@ export function nextQuestion(rec: ConsultRecord): Pending | null {
   if (!rec.complaints.length) return openingQuestion(lang, rec.misses > 0);
   // unconfirmed interpretations are checked with the patient first
   for (const c of rec.complaints) {
-    if (c.prov === 'inferred' && !c.confirmed) return { kind: 'confirm', complaint: c.id, text: L(lang, `Did you mean ${enA(c)}?`, `قصدك ${label(c, 'ar')}؟`), options: [opt('yes', 'Yes', 'أيوه', lang), opt('no', 'No', 'لأ', lang)] };
+    if (c.prov === 'inferred' && !c.confirmed) return { kind: 'confirm', complaint: c.id, text: L(lang, 'Did you mean {name}?', 'قصدك {name}؟', { name: lang === 'en' ? enA(c) : label(c, lang) }), options: [opt('yes', 'Yes', 'أيوه', lang), opt('no', 'No', 'لأ', lang)] };
     const ir = c.regions.find((r) => r.prov === 'inferred' && !r.confirmed);
-    if (ir) return { kind: 'confirm', complaint: c.id, value: `region:${ir.id}`, text: L(lang, `I understood that it is in the ${regionWords([ir.id], 'en')}. Is that right?`, `فهمت إنه في ${regionWords([ir.id], 'ar')}. صح كده؟`), options: [opt('yes', 'Yes', 'أيوه', lang), opt('no', 'No', 'لأ', lang)] };
+    if (ir) return { kind: 'confirm', complaint: c.id, value: `region:${ir.id}`, text: L(lang, 'I understood that it is in the {r}. Is that right?', 'فهمت إنه في {r}. صح كده؟', { r: regionWords([ir.id], lang) }), options: [opt('yes', 'Yes', 'أيوه', lang), opt('no', 'No', 'لأ', lang)] };
     for (const [slot, f] of Object.entries(c.facts) as [SlotId, Fact][]) {
-      if (f.prov === 'inferred' && !f.confirmed) return { kind: 'confirm', complaint: c.id, slot, value: f.value, text: L(lang, `About the ${label(c, 'en')}: I understood "${f.en}". Is that right?`, `بالنسبة لـ${label(c, 'ar')}: فهمت "${f.ar}". صح كده؟`), options: [opt('yes', 'Yes', 'أيوه', lang), opt('no', 'No', 'لأ', lang)] };
+      if (f.prov === 'inferred' && !f.confirmed) return { kind: 'confirm', complaint: c.id, slot, value: f.value, text: L(lang, 'About the {lab}: I understood "{v}". Is that right?', 'بالنسبة لـ{lab}: فهمت "{v}". صح كده؟', { lab: label(c, lang), v: factText(f, lang) }), options: [opt('yes', 'Yes', 'أيوه', lang), opt('no', 'No', 'لأ', lang)] };
     }
   }
   const real = rec.complaints.filter((c) => c.concept !== 'unwell');
@@ -337,6 +381,17 @@ function understoodLine(rec: ConsultRecord, c: Complaint, fresh: boolean, only?:
   const lang = rec.lang;
   const f: Partial<Record<SlotId, Fact>> = only ? Object.fromEntries(Object.entries(c.facts).filter(([k]) => only.has(k as SlotId))) : c.facts;
   const parts: string[] = [];
+  if (isDict(lang)) {
+    // "J'ai compris : mal de tête — intensité : forte ; début : hier."
+    for (const s of ['severity', 'onset', 'onset_type', 'location', 'pattern', 'side'] as SlotId[]) {
+      const x = f[s]; if (!x) continue;
+      if (s === 'side' && fresh && c.regions.some((r) => /_(l|r)$/.test(r.id))) continue;
+      parts.push(`${slotName(s, lang)}${colon(lang)}${factText(x, lang)}`);
+    }
+    const joined = parts.join(lang === 'ur' ? '؛ ' : '; ');
+    if (!fresh) return parts.length ? L(lang, 'Got it: {parts}.', 'تمام: {parts}.', { parts: joined }) : L(lang, 'Got it.', 'تمام.');
+    return parts.length ? L(lang, 'I understand you have {name}: {parts}.', 'فهمت إن عندك {name}، {parts}.', { name: label(c, lang), parts: joined }) : L(lang, 'I understand you have {name}.', 'فهمت إن عندك {name}.', { name: label(c, lang) });
+  }
   if (lang === 'ar') {
     const fem = !!CONCEPT_BY_ID[c.concept]?.fem;
     if (f.severity) parts.push(/^\d+$/.test(f.severity.value) ? `قوته ${f.severity.value} من 10` : `${fem ? 'وإنها' : 'وإنه'} ${f.severity.value === 'mild' ? (fem ? 'خفيفة' : 'خفيف') : f.severity.value === 'moderate' ? (fem ? 'متوسطة' : 'متوسط') : (fem ? 'شديدة' : 'شديد')}`);
@@ -370,7 +425,7 @@ export function ruleTurn(prev: ConsultRecord, input: ConsultInput): ConsultTurn 
   const correctionsBefore = rec.corrections.length;
   const text = input.kind === 'text' ? input.text.trim() : input.kind === 'option' ? input.label : '';
   if (input.kind !== 'regions') rec.turns.push({ who: 'patient', text, via: input.via });
-  else rec.turns.push({ who: 'patient', text: `[${L(lang, 'body map', 'صورة الجسم')}: ${regionWords(input.ids, lang)}]`, via: 'body_map' });
+  else rec.turns.push({ who: 'patient', text: `[${L(lang, 'body map', 'صورة الجسم')}${colon(lang)}${regionWords(input.ids, lang)}]`, via: 'body_map' });
 
   const target = (): Complaint | undefined => rec.complaints.find((c) => c.id === pend?.complaint) ?? rec.complaints.filter((c) => c.concept !== 'unwell').slice(-1)[0] ?? rec.complaints.slice(-1)[0];
   let understoodSomething = false;
@@ -446,8 +501,8 @@ export function ruleTurn(prev: ConsultRecord, input: ConsultInput): ConsultTurn 
 
   // ---- words (speech, typing, a confirmed signed message)
   if (input.kind === 'text') {
-    const u = understand(input.text);
-    const det = detectLang(input.text); if (det) rec.lang = det;
+    const det = detectLang(input.text, rec.lang); if (det) rec.lang = det;
+    const u = understand(input.text, rec.lang);
     const lg = rec.lang;
     if (u.stop) { rec.turns.push({ who: 'assistant', text: '' }); return done(rec, [L(lg, 'Okay, we can stop here. Nothing is sent unless you approve it. Say continue whenever you want, or main menu to leave.', 'تمام، نقف هنا. مفيش حاجة هتتبعت غير لما توافق. قول كمّل في أي وقت، أو القائمة علشان تخرج.')], false, true); }
     if (u.pause) return done(rec, [L(lg, 'Of course, take your time. I am here when you are ready.', 'طبعاً، خد وقتك. أنا هنا لما تكون جاهز.')], false, true);
@@ -503,7 +558,7 @@ export function ruleTurn(prev: ConsultRecord, input: ConsultInput): ConsultTurn 
       }
       // values
       const answering = (s: SlotId) => pend?.kind === 'slot' && pend.slot === s && pend.complaint === c.id;
-      if (u.number && (answering('severity') || /out of|من/.test(u.number.quote))) set(c, 'severity', sevFact(String(u.number.value), u.number.quote, 'said', 'patient', input.via), u.correction);
+      if (u.number && (answering('severity') || /out of|من|sur|میں سے|में से/.test(u.number.quote))) set(c, 'severity', sevFact(String(u.number.value), u.number.quote, 'said', 'patient', input.via), u.correction);
       else if (answering('severity') && /^\s*(10|[0-9])\s*$/.test(norm(input.text))) set(c, 'severity', sevFact(norm(input.text).trim(), input.text, 'said', 'patient', input.via), u.correction);
       else if (u.severity) set(c, 'severity', sevFact(u.severity.value, u.severity.quote, 'said', 'patient', input.via), u.correction);
       if (u.onset) set(c, 'onset', factFrom(ONSET, u.onset.value, u.onset.quote, 'said', 'patient', input.via), u.correction);
@@ -547,8 +602,8 @@ export function ruleTurn(prev: ConsultRecord, input: ConsultInput): ConsultTurn 
   if (conflict) {
     const k = conflict as { c: Complaint; slot: SlotId; old: Fact; next: Fact };
     rec.pending = { kind: 'clarify_conflict', complaint: k.c.id, slot: k.slot, value: k.next.value, other: k.old.value,
-      text: L(rec.lang, `Earlier you told me "${k.old.en}", and now "${k.next.en}". Which one is right?`, `قبل كده قلتلي "${k.old.ar}"، ودلوقتي "${k.next.ar}". أنهي الصح؟`),
-      options: [opt('conflict:old', k.old.en, k.old.ar, rec.lang), opt('conflict:new', k.next.en, k.next.ar, rec.lang)] };
+      text: L(rec.lang, 'Earlier you told me "{old}", and now "{new}". Which one is right?', 'قبل كده قلتلي "{old}"، ودلوقتي "{new}". أنهي الصح؟', { old: factText(k.old, rec.lang), new: factText(k.next, rec.lang) }),
+      options: [{ id: 'conflict:old', label: factText(k.old, rec.lang) }, { id: 'conflict:new', label: factText(k.next, rec.lang) }] };
     (rec.pending as Pending & { next?: Fact }).next = k.next;
     return done(rec, [...say, rec.pending.text], false, true);
   }
@@ -565,17 +620,17 @@ export function ruleTurn(prev: ConsultRecord, input: ConsultInput): ConsultTurn 
   if (fresh.length) {
     // a symptom read from a misspelled word is asked about ("Did you mean…?") instead of being stated
     const shown = fresh.filter((c) => c.prov !== 'inferred' && !(c.regions.length && c.regions.every((r) => r.prov === 'inferred')) && c.concept !== 'unwell' && c.concept !== 'other' && !(c.concept === 'pain' && !c.regions.length));
-    if (rec.complaints.length === fresh.length && shown.length) say.unshift(SORRY[rec.lang][0]);
+    if (rec.complaints.length === fresh.length && shown.length) say.unshift(tr(SORRY.en[0], SORRY.ar[0], rec.lang));
     if (shown.length === 1) say.push(understoodLine(rec, shown[0], true));
     else if (shown.length > 1) {
-      const names = shown.map((c) => (rec.lang === 'ar' ? c.ar : enA(c)));
-      say.push(L(rec.lang, `I understand you have ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}. I will ask about each one.`, `فهمت إن عندك ${names.join(' و')}. هسألك عن كل واحدة.`));
+      const names = shown.map((c) => (rec.lang === 'en' ? enA(c) : label(c, rec.lang)));
+      say.push(L(rec.lang, 'I understand you have {list} and {last}. I will ask about each one.', 'فهمت إن عندك {all}. هسألك عن كل واحدة.', { list: names.slice(0, -1).join(listSep(rec.lang)), last: names[names.length - 1], all: names.join(' و') }));
     }
     if (fresh.some((c) => c.concept === 'other')) say.push(L(rec.lang, 'Thank you, I wrote that down in your own words.', 'شكراً، كتبت ده بكلامك زي ما قلته.'));
   } else {
     for (const c of touched) if (c.concept !== 'unwell' && newSlots.get(c)?.size) {
       const line = understoodLine(rec, c, false, newSlots.get(c));
-      say.push(rec.corrections.length > correctionsBefore ? line.replace(/^Got it:/, 'Okay, I changed that:').replace(/^تمام:/, 'تمام، عدلتها:') : line);
+      say.push(rec.corrections.length > correctionsBefore ? (isDict(rec.lang) ? `${L(rec.lang, 'Okay, I changed that.', 'تمام، عدلتها.')} ${line}` : line.replace(/^Got it:/, 'Okay, I changed that:').replace(/^تمام:/, 'تمام، عدلتها:')) : line);
       break;
     }
   }
@@ -684,7 +739,8 @@ const TAG = {
 };
 function tagOf(f: { prov: Fact['prov']; confirmed: boolean; quote?: string }, lang: ConsultLang): string {
   const t = f.prov === 'inferred' ? (f.confirmed ? TAG.confirmedInf : TAG.inferred) : f.prov === 'said' ? TAG.said : TAG.chosen;
-  return f.prov === 'said' && f.quote ? `${t[lang]}: "${f.quote}"` : t[lang];
+  const w = tr(t.en, t.ar, lang);
+  return f.prov === 'said' && f.quote ? `${w}: "${f.quote}"` : w;
 }
 const SLOT_NAME: Record<SlotId, { en: string; ar: string }> = {
   location: { en: 'Where exactly', ar: 'المكان بالظبط' }, side: { en: 'Side', ar: 'الناحية' }, sensation: { en: 'Feels like', ar: 'الإحساس' },
@@ -697,21 +753,21 @@ export function summaryLines(rec: ConsultRecord, lang: ConsultLang = rec.lang): 
   const out: string[] = [];
   const cs = rec.complaints.filter((c) => c.concept !== 'unwell' || rec.complaints.length === 1);
   cs.forEach((c, i) => {
-    out.push(`${i + 1}. ${cap(label(c, lang))}${c.with ? L(lang, ` (together with the ${label(rec.complaints.find((x) => x.id === c.with) ?? c, lang)})`, ` (مع ${label(rec.complaints.find((x) => x.id === c.with) ?? c, lang)})`) : ''} — ${c.quote ? `${L(lang, 'you said', 'انت قلت')}: "${c.quote}"` : tagOf(c, lang)}`);
-    if (c.regions.length) out.push(`   ${L(lang, 'Body area', 'مكان في الجسم')}: ${regionWords(c.regions.map((r) => r.id), lang)} (${c.regions.some((r) => r.via === 'body_map') ? L(lang, 'shown on the body map', 'اتحدد على صورة الجسم') : tagOf({ ...c.regions[0], quote: undefined }, lang)})`);
+    out.push(`${i + 1}. ${cap(label(c, lang))}${c.with ? ` ${L(lang, '(together with the {lab})', '(مع {lab})', { lab: label(rec.complaints.find((x) => x.id === c.with) ?? c, lang) })}` : ''} — ${c.quote ? `${L(lang, 'you said', 'انت قلت')}: "${c.quote}"` : tagOf(c, lang)}`);
+    if (c.regions.length) out.push(`   ${L(lang, 'Body area', 'مكان في الجسم')}${colon(lang)}${regionWords(c.regions.map((r) => r.id), lang)} (${c.regions.some((r) => r.via === 'body_map') ? L(lang, 'shown on the body map', 'اتحدد على صورة الجسم') : tagOf({ ...c.regions[0], quote: undefined }, lang)})`);
     for (const s of ['location', 'side', 'sensation', 'severity', 'onset', 'onset_type', 'pattern', 'associated'] as SlotId[]) {
       const f = c.facts[s];
-      if (f) out.push(`   ${SLOT_NAME[s][lang]}: ${lang === 'ar' ? f.ar : f.en} (${tagOf(f, lang)})`);
-      else if (c.unknown.includes(s)) out.push(`   ${SLOT_NAME[s][lang]}: ${L(lang, 'not sure', 'مش متأكد')}`);
+      if (f) out.push(`   ${slotName(s, lang)}${colon(lang)}${factText(f, lang)} (${tagOf(f, lang)})`);
+      else if (c.unknown.includes(s)) out.push(`   ${slotName(s, lang)}${colon(lang)}${L(lang, 'not sure', 'مش متأكد')}`);
     }
     const notAsked = (CONCEPT_BY_ID[c.concept]?.plan ?? []).filter((s) => !c.facts[s] && !c.unknown.includes(s) && s !== 'side' && s !== 'associated' && !(s === 'location' && c.concept === 'pain' && c.regions.length));
-    if (notAsked.length && !c.with) out.push(`   ${L(lang, 'Not answered', 'متجاوبش عليه')}: ${notAsked.map((s) => SLOT_NAME[s][lang]).join(lang === 'ar' ? '، ' : ', ')}`);
+    if (notAsked.length && !c.with) out.push(`   ${L(lang, 'Not answered', 'متجاوبش عليه')}${colon(lang)}${notAsked.map((s) => slotName(s, lang)).join(listSep(lang))}`);
   });
-  if (rec.denied.length) out.push(`${L(lang, 'You said you do not have', 'قلت إن مفيش')}: ${[...new Set(rec.denied)].map((d) => L(lang, CONCEPT_BY_ID[d]?.en ?? d, CONCEPT_BY_ID[d]?.ar ?? d)).join(lang === 'ar' ? '، ' : ', ')}`);
+  if (rec.denied.length) out.push(`${L(lang, 'You said you do not have', 'قلت إن مفيش')}${colon(lang)}${[...new Set(rec.denied)].map((d) => lowerFirst(inLang(CONCEPT_BY_ID[d]?.en ?? d, CONCEPT_BY_ID[d]?.ar ?? d, lang), lang)).join(listSep(lang))}`);
   const qs = rec.notes.filter((n) => n.kind === 'question');
-  if (qs.length) out.push(`${L(lang, 'Your questions for the doctor', 'أسئلتك للدكتور')}: ${qs.map((q) => `"${q.text}"`).join('; ')}`);
-  if (rec.corrections.length) out.push(`${L(lang, 'You corrected', 'انت صححت')}: ${rec.corrections.map((x) => `${x.from} → ${x.to === 'removed' ? L(lang, 'removed', 'اتشال') : x.to}`).join('; ')}`);
-  if (rec.urgent.length) out.push(`${L(lang, 'Urgent-help guidance was shown because of', 'اتعرضت إرشادات الطوارئ بسبب')}: ${rec.urgent.join('; ')}`);
+  if (qs.length) out.push(`${L(lang, 'Your questions for the doctor', 'أسئلتك للدكتور')}${colon(lang)}${qs.map((q) => `"${q.text}"`).join('; ')}`);
+  if (rec.corrections.length) out.push(`${L(lang, 'You corrected', 'انت صححت')}${colon(lang)}${rec.corrections.map((x) => `${x.from} → ${x.to === 'removed' ? L(lang, 'removed', 'اتشال') : x.to}`).join('; ')}`);
+  if (rec.urgent.length) out.push(`${L(lang, 'Urgent-help guidance was shown because of', 'اتعرضت إرشادات الطوارئ بسبب')}${colon(lang)}${rec.urgent.map((u) => (isDict(lang) ? translateTo(u, lang) ?? u : u)).join('; ')}`);
   return out;
 }
 
@@ -720,8 +776,8 @@ export function spokenSummary(rec: ConsultRecord): string[] {
   const lang = rec.lang;
   const out: string[] = [];
   for (const c of rec.complaints.filter((x) => x.concept !== 'unwell' || rec.complaints.length === 1)) out.push(understoodLine(rec, c, true));
-  const unknown = rec.complaints.flatMap((c) => c.unknown.map((s) => SLOT_NAME[s][lang]));
-  if (unknown.length) out.push(L(lang, `Marked as not sure: ${unknown.join(', ')}.`, `مكتوب إنك مش متأكد من: ${unknown.join('، ')}.`));
+  const unknown = rec.complaints.flatMap((c) => c.unknown.map((s) => slotName(s, lang)));
+  if (unknown.length) out.push(L(lang, 'Marked as not sure: {list}.', 'مكتوب إنك مش متأكد من: {list}.', { list: unknown.join(listSep(lang)) }));
   if (rec.notes.some((n) => n.kind === 'question')) out.push(L(lang, 'Your questions are included for the doctor.', 'أسئلتك متضافة للدكتور.'));
   return out;
 }

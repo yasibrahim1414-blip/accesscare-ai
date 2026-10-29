@@ -1,4 +1,5 @@
 // Patient: wound/skin photo timeline, emergency card (with QR), caregivers.
+import { dateLocale, pick, tr, LANGS, type Lang } from '../../i18n/lang';
 import React, { useEffect, useMemo, useState } from 'react';
 import { LuCamera, LuTrash2, LuSiren, LuHeartHandshake, LuUserPlus, LuMaximize, LuX, LuVolume2, LuRefreshCw, LuSave, LuPhone, LuImages } from 'react-icons/lu';
 import { useApp, useLoad } from '../../app/AppContext';
@@ -11,7 +12,7 @@ import { CameraCapture } from './CameraCapture';
 import { useL } from './MedScreens';
 import { loadMedData, shareCareDefault } from './careData';
 
-const fmtDay = (iso: string, lang: string) => new Date(iso).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const fmtDay = (iso: string, lang: string) => new Date(iso).toLocaleDateString(dateLocale(lang), { day: 'numeric', month: 'short', year: 'numeric' });
 
 // ---------------------------------------------------------------- photos
 export function PhotosScreen() {
@@ -46,7 +47,7 @@ export function PhotosScreen() {
     for (const r of list.data ?? []) { const k = r.data.area || L('Other', 'غير ذلك'); m.set(k, [...(m.get(k) ?? []), r]); }
     return [...m.entries()];
   }, [list.data, lang]); // eslint-disable-line react-hooks/exhaustive-deps
-  const areas = BODY_REGIONS.map((r) => regionLabelIn(r.id, lang === 'ar' ? 'ar' : 'en'));
+  const areas = BODY_REGIONS.map((r) => regionLabelIn(r.id, lang));
   const known = groups.map(([k]) => k);
 
   return (
@@ -110,9 +111,9 @@ export function PhotoCompare({ first, last, lang }: { first: PatientRecord<Photo
   return (
     <div className="photo-compare" data-testid="ph-compare-view">
       {[first, last].map((r, i) => (
-        <figure key={r.id}><img src={r.data.image} alt={`${i ? 'Latest' : 'First'} ${fmtDay(r.at, lang)}`} /><figcaption className="tiny"><b>{i ? (lang === 'ar' ? 'الأخيرة' : 'Latest') : (lang === 'ar' ? 'الأولى' : 'First')}</b> · <span data-no-tr>{fmtDay(r.at, lang)}</span>{r.data.note && <span data-no-tr> · {r.data.note}</span>}</figcaption></figure>
+        <figure key={r.id}><img src={r.data.image} alt={`${i ? 'Latest' : 'First'} ${fmtDay(r.at, lang)}`} /><figcaption className="tiny"><b>{i ? tr('Latest', 'الأخيرة', lang) : tr('First', 'الأولى', lang)}</b> · <span data-no-tr>{fmtDay(r.at, lang)}</span>{r.data.note && <span data-no-tr> · {r.data.note}</span>}</figcaption></figure>
       ))}
-      <p className="tiny muted" style={{ gridColumn: '1 / -1' }}>{lang === 'ar' ? `${days} يوم بين الصورتين. للمقارنة بالعين بس — مش تقييم.` : `${days} day(s) apart. For comparing by eye only — not an assessment.`}</p>
+      <p className="tiny muted" style={{ gridColumn: '1 / -1' }}>{tr('{n} day(s) apart. For comparing by eye only — not an assessment.', '{n} يوم بين الصورتين. للمقارنة بالعين بس — مش تقييم.', lang, { n: days })}</p>
     </div>
   );
 }
@@ -129,10 +130,10 @@ const CARD_FIELDS: { k: keyof CardData; en: string; ar: string; multiline?: bool
   { k: 'notes', en: 'Other notes for paramedics', ar: 'ملاحظات تانية للإسعاف', multiline: true, hintEn: 'e.g. I am blind / deaf; I use a pacemaker', hintAr: 'مثلًا: أنا كفيف / أصم؛ عندي جهاز منظم ضربات' },
 ];
 
-export function cardText(card: CardData, name: string, lang: 'en' | 'ar'): string {
-  const lines = [lang === 'ar' ? 'كارت طوارئ — AccessCare' : 'EMERGENCY CARD — AccessCare', `${lang === 'ar' ? 'الاسم' : 'Name'}: ${name}`];
-  for (const f of CARD_FIELDS) if (card[f.k]) lines.push(`${lang === 'ar' ? f.ar : f.en.replace(' (if known)', '')}: ${card[f.k]}`);
-  lines.push(lang === 'ar' ? 'كتبه المريض بنفسه. مش سجل طبي.' : 'Written by the patient. Not a medical record.');
+export function cardText(card: CardData, name: string, lang: Lang): string {
+  const lines = [tr('EMERGENCY CARD — AccessCare', 'كارت طوارئ — AccessCare', lang), `${tr('Name', 'الاسم', lang)}: ${name}`];
+  for (const f of CARD_FIELDS) if (card[f.k]) lines.push(`${tr(f.en.replace(' (if known)', ''), f.ar.replace(' (لو عارفها)', ''), lang)}: ${card[f.k]}`);
+  lines.push(tr('Written by the patient. Not a medical record.', 'كتبه المريض بنفسه. مش سجل طبي.', lang));
   return lines.join('\n');
 }
 
@@ -145,7 +146,7 @@ export function EmergencyCardScreen() {
   const [f, setF] = useState<CardData>({ allergies: '', medicines: '', conditions: '', bloodType: '', contactName: '', contactPhone: '', notes: '' });
   const [busy, setBusy] = useState(false);
   const [full, setFull] = useState(false);
-  const [qrLang, setQrLang] = useState<'en' | 'ar'>('en');
+  const [qrLang, setQrLang] = useState<Lang>('en');
   useEffect(() => { if (saved) setF(saved); else if (rec.data) setEdit(true); }, [rec.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fillMeds = async () => {
@@ -190,12 +191,12 @@ export function EmergencyCardScreen() {
                 {(saved.contactName || saved.contactPhone) && <><dt>{L('Emergency contact', 'رقم الطوارئ')}</dt><dd data-no-tr dir="auto">{saved.contactName}{saved.contactPhone && <> <a href={`tel:${saved.contactPhone.replace(/[^\d+]/g, '')}`} dir="ltr"><LuPhone aria-hidden /> {saved.contactPhone}</a></>}</dd></>}
               </dl>
               <div className="seg" role="group" aria-label={L('QR code language', 'لغة كود QR')}>
-                <button aria-pressed={qrLang === 'en'} onClick={() => setQrLang('en')}>English</button><button aria-pressed={qrLang === 'ar'} onClick={() => setQrLang('ar')}>عربي</button>
+                {LANGS.filter((x) => x.id === 'en' || x.id === 'ar' || x.id === lang).map((x) => <button key={x.id} lang={x.id} aria-pressed={qrLang === x.id} onClick={() => setQrLang(x.id)} data-testid={`qr-lang-${x.id}`}>{x.native}</button>)}
               </div>
               {qr ? <QrSvg d={qr.d} size={qr.size} label={L('QR code with this emergency card', 'كود QR فيه كارت الطوارئ')} /> : <p className="small warn-text">{L('The card is too long for a QR code — shorten the notes.', 'الكارت طويل على كود QR — قصّر الملاحظات.')}</p>}
               <Button big block onClick={() => setFull(true)} data-testid="card-full"><LuMaximize aria-hidden /> {L('Show to paramedic', 'وريه للإسعاف')}</Button>
               <div className="grid2">
-                {ttsSupported() && <Button variant="secondary" onClick={() => speak(cardText(saved, name, lang === 'ar' ? 'ar' : 'en'))}><LuVolume2 aria-hidden /> {L('Read aloud', 'اقراه بصوت')}</Button>}
+                {ttsSupported() && <Button variant="secondary" onClick={() => speak(cardText(saved, name, lang))}><LuVolume2 aria-hidden /> {L('Read aloud', 'اقراه بصوت')}</Button>}
                 <Button variant="secondary" onClick={() => setEdit(true)} data-testid="card-edit">{L('Edit', 'عدّل')}</Button>
               </div>
             </section>
@@ -206,7 +207,7 @@ export function EmergencyCardScreen() {
       {full && saved && (
         <div className="em-full" role="dialog" aria-modal="true" aria-label={L('Emergency card', 'كارت الطوارئ')} data-testid="em-full">
           <button className="iconbtn em-close" onClick={() => setFull(false)} aria-label={L('Close', 'اقفل')}><LuX /></button>
-          <h2>{qrLang === 'ar' ? 'كارت طوارئ' : 'EMERGENCY CARD'}</h2>
+          <h2>{tr('EMERGENCY CARD', 'كارت طوارئ', qrLang)}</h2>
           <pre dir="auto" data-no-tr>{text}</pre>
           {qr && <QrSvg d={qr.d} size={qr.size} label="QR" big />}
         </div>

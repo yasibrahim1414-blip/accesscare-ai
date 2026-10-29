@@ -266,7 +266,7 @@ with sync_playwright() as p:
     pat.set_viewport_size({'width': 360, 'height': 780})
     pat.goto(f'{BASE}?uid=u-pat&name=Omar'); expect(pat.locator('.tab')).to_have_count(6, timeout=20000)
     tab(pat, 'Care')
-    pat.locator('[data-testid=lang-switch]:visible').first.click()
+    pat.locator('[data-testid=lang-switch]:visible').first.click(); pat.locator('[data-testid=lang-opt-ar]').click()
     expect(pat.locator('h1').first).to_contain_text('رعايتي', timeout=5000)
     assert pat.evaluate('document.documentElement.dir') == 'rtl'
     for t in ['p.meds', 'p.boxcheck', 'p.photos', 'p.card', 'p.caregivers', 'interp']:

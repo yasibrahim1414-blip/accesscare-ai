@@ -1,11 +1,11 @@
 // The app frame shared by every screen: navigation (bottom tabs on phones, a
 // side bar on wide screens), the language switch, the Blind Mode control and the
 // storage notice. Patients and doctors get their own navigation in one design.
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LuHouse, LuClipboardList, LuStethoscope, LuUserRound, LuLayoutDashboard, LuUsers, LuInbox, LuRadioTower, LuAudioLines, LuNotebookPen, LuTrendingUp, LuLanguages, LuSettings, LuHeartPulse, LuHeartHandshake } from 'react-icons/lu';
 import { useApp, useLoad, type Route } from './AppContext';
 import { useBlind } from '../a11y/BlindLayer';
-import { useLang, setLang } from '../i18n/lang';
+import { useLang, setLang, LANGS, langInfo, tr, type Lang } from '../i18n/lang';
 
 export const PATIENT_TABS = [
   { route: { name: 'p.home' } as Route, label: 'Home', Icon: LuHouse, also: ['p.consult', 'p.detail', 'p.connect', 'p.prefs', 'p.onboard'] },
@@ -87,12 +87,41 @@ export function SideNav() {
 
 export function LangSwitch({ wide }: { wide?: boolean }) {
   const lang = useLang();
-  const next = lang === 'ar' ? 'en' : 'ar';
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const cur = langInfo(lang);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: Event) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); box.current?.querySelector<HTMLElement>('[data-testid=lang-switch]')?.focus(); } };
+    document.addEventListener('pointerdown', off); document.addEventListener('keydown', esc);
+    window.setTimeout(() => box.current?.querySelector<HTMLElement>('[aria-checked=true]')?.focus(), 0);
+    return () => { document.removeEventListener('pointerdown', off); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const choose = (l: Lang) => { setOpen(false); setLang(l); window.setTimeout(() => box.current?.querySelector<HTMLElement>('[data-testid=lang-switch]')?.focus(), 0); };
   return (
-    <button className={`util-btn lang${wide ? ' wide' : ''}`} onClick={() => setLang(next)} lang={next} data-no-tr data-testid="lang-switch"
-      aria-label={next === 'ar' ? 'التحويل للعربية — Switch to Arabic' : 'Switch to English — التحويل للإنجليزية'}>
-      <LuLanguages aria-hidden /><span>{next === 'ar' ? 'العربية' : 'English'}</span>
-    </button>
+    <div className={`lang-pick${wide ? ' wide' : ''}`} ref={box} data-no-tr>
+      <button className={`util-btn lang${wide ? ' wide' : ''}`} onClick={() => setOpen((o) => !o)} data-testid="lang-switch" aria-haspopup="menu" aria-expanded={open}
+        aria-label={`${cur.native} — ${tr('Change language', 'تغيير اللغة', lang)}`}>
+        <LuLanguages aria-hidden /><span lang={cur.id}>{cur.native}</span>
+      </button>
+      {open && (
+        <div className="lang-menu" role="menu" aria-label={tr('Choose a language', 'اختر اللغة', lang)}>
+          {LANGS.map((l) => (
+            <button key={l.id} role="menuitemradio" aria-checked={l.id === lang} lang={l.id} dir={l.dir} data-testid={`lang-opt-${l.id}`}
+              className={l.id === lang ? 'on' : ''} onClick={() => choose(l.id)}
+              onKeyDown={(e) => {
+                if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+                e.preventDefault();
+                const items = [...(box.current?.querySelectorAll<HTMLElement>('[role=menuitemradio]') ?? [])];
+                const i = items.indexOf(e.currentTarget); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus();
+              }}>
+              <span className="ln">{l.native}</span>{l.id !== 'en' && <span className="le" lang="en" dir="ltr">{l.english}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -100,13 +129,13 @@ export function BlindButton({ wide }: { wide?: boolean }) {
   const blind = useBlind();
   const { me } = useApp();
   const lang = useLang();
-  const ar = lang === 'ar';
+  const L = (en: string, ar: string) => tr(en, ar, lang);
   if (me?.profile.role === 'doctor') return null; // Blind Mode is not offered on doctor accounts
   return (
     <button className={`util-btn blind${blind.on ? ' on' : ''}${wide ? ' wide' : ''}`} data-no-tr data-testid="global-blind" aria-pressed={blind.on}
       onClick={() => (blind.on ? blind.disable() : blind.enable('button'))}
-      aria-label={blind.on ? (ar ? 'إيقاف الوضع الصوتي. أو اسحب لليمين ٣ مرات' : 'Turn off Blind Mode. You can also swipe right three times') : (ar ? 'تشغيل الوضع الصوتي: تحكم كامل بالصوت. اختصار: Alt+Shift+B، أو اسحب لليسار ٣ مرات' : 'Turn on Blind Mode: control the whole app by voice. Shortcut Alt+Shift+B, or swipe left three times')}>
-      <LuAudioLines aria-hidden /><span>{ar ? (blind.on ? 'الوضع الصوتي شغال' : 'الوضع الصوتي') : (blind.on ? 'Blind Mode on' : 'Blind Mode')}</span>
+      aria-label={blind.on ? L('Turn off Blind Mode. You can also swipe right three times', 'إيقاف الوضع الصوتي. أو اسحب لليمين ٣ مرات') : L('Turn on Blind Mode: control the whole app by voice. Shortcut Alt+Shift+B, or swipe left three times', 'تشغيل الوضع الصوتي: تحكم كامل بالصوت. اختصار: Alt+Shift+B، أو اسحب لليسار ٣ مرات')}>
+      <LuAudioLines aria-hidden /><span>{blind.on ? L('Blind Mode on', 'الوضع الصوتي شغال') : L('Blind Mode', 'الوضع الصوتي')}</span>
     </button>
   );
 }

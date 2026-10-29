@@ -1,13 +1,14 @@
-// Arabic interface: translates the app's own English interface text in place.
+// Interface translation: translates the app's own English interface text in place.
 //
-// Every screen is written once (in English). When Arabic is chosen, this layer
-// replaces interface text and accessible names (aria-label, placeholder, title)
-// with their Arabic versions from the dictionary, and puts them back when English
-// is chosen again. It never touches what people typed or wrote: form values,
+// Every screen is written once (in English). When another language is chosen, this
+// layer replaces interface text and accessible names (aria-label, placeholder, title)
+// with their versions from that language's dictionary (ar.ts, fr.ts, ur.ts, hi.ts),
+// and puts them back when English is chosen again. It never touches what people typed or wrote: form values,
 // messages, reports and anything inside [data-no-tr] stay exactly as written.
 // Text with no dictionary entry stays as it is (never machine-guessed).
 import { AR, AR_PATTERNS } from './ar';
-import { getLang, onLang } from './lang';
+import { getLang, onLang, type Lang } from './lang';
+import { translateTo } from './dict';
 
 const ATTRS = ['aria-label', 'placeholder', 'title', 'alt', 'aria-description'] as const;
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'CODE', 'PRE', 'NOSCRIPT']);
@@ -41,12 +42,20 @@ function skipped(el: Element | null): boolean {
   return false;
 }
 
-function doText(n: Text, ar: boolean) {
+/** The text in the given language (null: leave it as it is). */
+export function toLang(text: string, l: Lang): string | null {
+  if (l === 'en') return null;
+  if (l === 'ar') return toArabic(text);
+  return translateTo(text, l);
+}
+
+function doText(n: Text, l: Lang) {
   const rec = textOrig.get(n);
   const now = n.nodeValue ?? '';
   const orig = rec && now === rec.shown ? rec.orig : now; // React may have written new text since
-  if (!ar) { if (rec && now === rec.shown && rec.orig !== now) n.nodeValue = rec.orig; textOrig.delete(n); return; }
-  const t = toArabic(orig);
+  if (l === 'en') { if (rec && now === rec.shown && rec.orig !== now) n.nodeValue = rec.orig; textOrig.delete(n); return; }
+  const t = toLang(orig, l);
+  if (!t && rec && now === rec.shown && rec.orig !== now) n.nodeValue = rec.orig; // switched to a language without this entry
   if (!t) { textOrig.delete(n); return; }
   const lead = orig.match(/^\s*/)?.[0] ?? '', trail = orig.match(/\s*$/)?.[0] ?? '';
   const shown = lead + t + trail;
@@ -54,23 +63,23 @@ function doText(n: Text, ar: boolean) {
   textOrig.set(n, { orig, shown });
 }
 
-function doAttrs(el: Element, ar: boolean) {
+function doAttrs(el: Element, l: Lang) {
   let map = attrOrig.get(el);
   for (const a of ATTRS) {
     const now = el.getAttribute(a);
     const rec = map?.get(a);
     if (now === null) { map?.delete(a); continue; }
     const orig = rec && now === rec.shown ? rec.orig : now;
-    if (!ar) { if (rec && now === rec.shown && rec.orig !== now) el.setAttribute(a, rec.orig); map?.delete(a); continue; }
-    const t = toArabic(orig);
-    if (!t) { map?.delete(a); continue; }
+    if (l === 'en') { if (rec && now === rec.shown && rec.orig !== now) el.setAttribute(a, rec.orig); map?.delete(a); continue; }
+    const t = toLang(orig, l);
+    if (!t) { if (rec && now === rec.shown && rec.orig !== now) el.setAttribute(a, rec.orig); map?.delete(a); continue; }
     if (now !== t) el.setAttribute(a, t);
     if (!map) { map = new Map(); attrOrig.set(el, map); }
     map.set(a, { orig, shown: t });
   }
 }
 
-function walk(root: Node, ar: boolean) {
+function walk(root: Node, ar: Lang) {
   if (root.nodeType === Node.TEXT_NODE) { if (!skipped((root as Text).parentElement)) doText(root as Text, ar); return; }
   if (!(root instanceof Element) || skipped(root)) return;
   doAttrs(root, ar);
@@ -88,7 +97,7 @@ let busy = false;
 export function startTranslation(root: HTMLElement = document.body) {
   const run = (nodes: Node[]) => {
     if (busy) return; busy = true;
-    try { const ar = getLang() === 'ar'; for (const n of nodes) walk(n, ar); } finally { busy = false; }
+    try { const l = getLang(); for (const n of nodes) walk(n, l); } finally { busy = false; }
   };
   observer?.disconnect();
   observer = new MutationObserver((muts) => {

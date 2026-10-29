@@ -6,6 +6,8 @@
 // could not find — but only by quoting the patient's own words. The "correct"
 // wording shown to the patient is always the doctor's, never AI text.
 import type { Message } from '../../domain/types';
+import type { Lang } from '../../i18n/lang';
+import { LANG_NAME } from '../langWords';
 import type { TBPoint, TBStatus } from '../../domain/interact';
 import { CONVERSE_PREFIX } from '../conversation/ai';
 import { norm } from '../conversation/lexicon';
@@ -139,11 +141,11 @@ export function checkRules(text: string, points: PlanPoint[]): TBPoint[] {
 }
 
 // ---------------------------------------------------------------- AI (optional)
-export function teachBackPrompt(text: string, points: PlanPoint[], lang: 'en' | 'ar'): string {
+export function teachBackPrompt(text: string, points: PlanPoint[], lang: Lang): string {
   return `${CONVERSE_PREFIX}. Task: teach-back check. After a visit, a patient explained their treatment plan in their own words. For each plan point, decide whether the patient's words show they understood it ("understood"), said something different ("different"), or did not mention it ("missing").
 Rules: judge only from the patient's words; for "understood" or "different" you MUST copy the exact words from the patient's text into "quote"; never add advice, never change the plan, never reassure.
 Plan points (what the doctor wrote): ${JSON.stringify(points.map((p) => ({ id: p.id, about: p.label.en, doctor_wrote: p.correct })))}
-Patient's words (${lang === 'ar' ? 'Arabic' : 'English'}): ${JSON.stringify(text.slice(0, 1000))}
+Patient's words (${LANG_NAME[lang] ?? 'English'}): ${JSON.stringify(text.slice(0, 1000))}
 Reply with only JSON: {"points":[{"id":"...","status":"understood"|"different"|"missing","quote":"..."}]}`;
 }
 export function applyTeachBackAI(text: string, rules: TBPoint[], raw: unknown): { points: TBPoint[]; ai: boolean } {
@@ -161,7 +163,7 @@ export function applyTeachBackAI(text: string, rules: TBPoint[], raw: unknown): 
   }
   return { points: out, ai: used };
 }
-export async function checkTeachBack(text: string, points: PlanPoint[], lang: 'en' | 'ar', ask: ((p: string) => Promise<unknown>) | null): Promise<{ points: TBPoint[]; ai: boolean }> {
+export async function checkTeachBack(text: string, points: PlanPoint[], lang: Lang, ask: ((p: string) => Promise<unknown>) | null): Promise<{ points: TBPoint[]; ai: boolean }> {
   const rules = checkRules(text, points);
   if (!ask || !rules.some((p) => p.status === 'missing')) return { points: rules, ai: false };
   try { return applyTeachBackAI(text, rules, await ask(teachBackPrompt(text, points, lang))); } catch { return { points: rules, ai: false }; }

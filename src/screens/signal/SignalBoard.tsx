@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { LuMic, LuCheck, LuX } from 'react-icons/lu';
+import { LOCALE } from '../../services/voice/Speech';
+import { getLang } from '../../i18n/lang';
 import type { SignalMethod } from '../../domain/types';
 import { AMBIGUITY_WINDOW_MS, interpretScanPress, interpretTaps, matchSpeech, type SignalOption, type Tap } from '../../services/signal/SignalEngine';
 import { speak } from '../../ui/components';
@@ -164,7 +166,7 @@ function SpeechInput({ options, onPick, onUnclear, onNone }: { options: SignalOp
   const start = () => {
     try {
       const r = new Rec();
-      r.lang = navigator.language || 'en-US';
+      r.lang = getLang() === 'en' ? (navigator.language || 'en-US') : LOCALE[getLang()];
       r.onresult = (e: any) => {
         const t = Array.from(e.results).map((x: any) => x[0].transcript).join(' ');
         setHeard(t);
