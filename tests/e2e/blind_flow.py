@@ -280,6 +280,7 @@ with sync_playwright() as p:
     say(dev2, 'log out', 'Log out'); say(dev2, 'yes', 'logged out')
     wait_spoken(dev2, 'create a new account, or log in')
     say(dev2, 'I forgot my password', 'recovery code and a new password')
+    expect(dev2.locator('#va-confirm')).to_be_visible(); dev2.wait_for_timeout(300)  # the recovery form is on screen
     dev2.fill('#va-code', rcode.lower().replace('-', ' ')); dev2.fill('#va-password', 'brand-new-pass-2'); dev2.fill('#va-confirm', 'brand-new-pass-2')
     clear(dev2); dev2.get_by_test_id('va-form-submit').click()
     wait_spoken(dev2, 'Your password was changed', 60000)
