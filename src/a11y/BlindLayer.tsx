@@ -21,7 +21,7 @@ import { LuMic, LuMicOff, LuRepeat, LuSquare, LuX, LuEar } from 'react-icons/lu'
 import { useApp, homeFor, type Route } from '../app/AppContext';
 import { useLang, setLang, getLang, tr, dateLocale, isRtl, listSep, type Lang } from '../i18n/lang';
 import { foldText, LANG_NAME } from '../services/langWords';
-import { Speaker, Listener, sttSupported, ttsAvailable, unlockAudio, errText, type SpeechErr } from '../services/voice/Speech';
+import { Speaker, Listener, sttSupported, ttsAvailable, unlockAudio, errText, serverListen, SERVER_LISTEN_NOTE, type SpeechErr } from '../services/voice/Speech';
 import { GestureRecognizer, TripleSwipeDetector, TripleTapDetector, type Gesture } from '../services/voice/Gestures';
 import { deviceBlind, setDeviceBlind, onDeviceBlind, defaultBlind, micChoice, setMicChoice } from '../screens/voice/blindMode';
 import type { BlindPrefs } from '../domain/voice';
@@ -695,6 +695,7 @@ function VoiceBar(p: { status: Status; heard: string; spoken: string; mic: 'yes'
       {(p.mic === null && sttSupported()) ? (
         <div className="vb-consent">
           <p className="vb-note">{L('Blind Mode listens only while the microphone icon is on. Your browser turns speech into text (Chrome: Google; Safari: Apple). AccessCare does not record or keep audio.', 'الوضع الصوتي بيسمع بس والمايك شغال. المتصفح بيحوّل الكلام لنص (كروم: جوجل، سفاري: آبل). أكسس كير مش بيسجّل ولا بيحتفظ بأي صوت.')}</p>
+          {serverListen.available && <p className="vb-note" data-testid="server-listen-note">{L(SERVER_LISTEN_NOTE.en, SERVER_LISTEN_NOTE.ar)}</p>}
           <div className="vb-row">
             <button className="vb-btn primary big" onClick={p.onListen} data-testid="blind-mic-allow"><LuMic aria-hidden /> {L('Allow microphone', 'اسمح بالمايك')}</button>
             <button className="vb-btn" onClick={p.onMicNo} data-testid="blind-mic-no">{L('Not now', 'مش دلوقتي')}</button>

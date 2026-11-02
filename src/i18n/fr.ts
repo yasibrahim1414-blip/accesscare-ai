@@ -1914,4 +1914,5 @@ export const FR: Record<string, string> = {
   'That sounds uncomfortable.': 'Cela semble pénible.',
   'Thank you for telling me.': 'Merci de me l’avoir dit.',
   'Or type it, in your language': 'Ou écrivez-le, dans votre langue',
+  'If your browser cannot turn speech into text itself, your short answer is sent to the AccessCare server and turned into text by Cloudflare Workers AI (Whisper). AccessCare does not keep the recording.': 'Si votre navigateur ne sait pas transformer la parole en texte, votre courte réponse est envoyée au serveur AccessCare et transcrite par Cloudflare Workers AI (Whisper). AccessCare ne garde pas l’enregistrement.',
 };

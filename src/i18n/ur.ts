@@ -1914,4 +1914,5 @@ export const UR: Record<string, string> = {
   'That sounds uncomfortable.': 'یہ تکلیف دہ لگتا ہے۔',
   'Thank you for telling me.': 'بتانے کا شکریہ۔',
   'Or type it, in your language': 'یا اپنی زبان میں لکھیں',
+  'If your browser cannot turn speech into text itself, your short answer is sent to the AccessCare server and turned into text by Cloudflare Workers AI (Whisper). AccessCare does not keep the recording.': 'اگر آپ کا براؤزر خود آواز کو متن میں نہیں بدل سکتا تو آپ کا مختصر جواب ایکسس کیئر سرور کو بھیجا جاتا ہے اور Cloudflare Workers AI (Whisper) اسے متن میں بدلتا ہے۔ ایکسس کیئر ریکارڈنگ محفوظ نہیں رکھتا۔',
 };

@@ -9,7 +9,7 @@ import { LuMic, LuMicOff, LuRepeat, LuPause, LuPlay, LuSquare, LuSend, LuKeyboar
 import { homeFor, useApp, useLoad } from '../../app/AppContext';
 import { Banner, Button, Field, TopBar } from '../../ui/components';
 import { initialState, step, t, type Ctx, type DialogState, type Effect, type Input, type Msg, type Option, type Turn } from '../../services/voice/VoiceDialog';
-import { Listener, Speaker, errText, primeSpeech, sttSupported, ttsAvailable, naturalVoice, unlockAudio, voicesFor, bestVoice, onlyBasicVoices, type SpeechErr } from '../../services/voice/Speech';
+import { Listener, Speaker, errText, primeSpeech, sttSupported, ttsAvailable, naturalVoice, unlockAudio, voicesFor, bestVoice, onlyBasicVoices, serverListen, SERVER_LISTEN_NOTE, type SpeechErr } from '../../services/voice/Speech';
 import { converse } from '../../services/conversation/ai';
 import { startConsult, reportData, summaryLines as consultSummaryLines, type ConsultTurn } from '../../services/conversation/Consult';
 import { BodySelector } from '../../body/BodySelector';
@@ -485,6 +485,7 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
               <b>{L(lang, 'Answer by speaking?', 'تجاوب بالكلام؟')}</b>
               <p className="small">{L(lang, 'I need the microphone to hear you. Your browser will ask for permission. Your speech is turned into text by your browser’s speech service (Chrome: Google; Safari: Apple). AccessCare does not record or keep audio.',
                 'محتاج المايك علشان أسمعك. المتصفح هيطلب الإذن. كلامك بيتحول لنص عن طريق خدمة الكلام في المتصفح (كروم: جوجل، سفاري: آبل). أكسس كير مش بيسجل ولا بيحتفظ بأي صوت.')}</p>
+              {serverListen.available && <p className="small" data-testid="server-listen-note">{L(lang, SERVER_LISTEN_NOTE.en, SERVER_LISTEN_NOTE.ar)}</p>}
               <div className="grid2">
                 <Button big data-va-item onClick={() => { unlockAudio(); setMicConsent('yes'); micConsentRef.current = 'yes'; void listenOnce(); }} data-testid="mic-allow"><LuMic aria-hidden /> {L(lang, 'Allow microphone', 'اسمح بالمايك')}</Button>
                 <Button big variant="secondary" data-va-item onClick={() => { setMicConsent('no'); micConsentRef.current = 'no'; void saveBlind({ ...bpRef.current, input: 'touch' }); }} data-testid="mic-deny"><LuHand aria-hidden /> {talk ? L(lang, 'Type or tap instead', 'هكتب أو أدوس') : L(lang, 'Use buttons instead', 'استخدم الزراير')}</Button>
@@ -609,7 +610,7 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
               {' '}{L(lang, 'It does not diagnose. In an emergency call your local emergency number.', 'مش بيشخّص. في الطوارئ اتصل برقم الطوارئ.')}</span>
             <span className="tiny" data-testid="va-ai-status">{aiLine}</span>
             {ai.supported && ctx.aiOn && <Button variant="secondary" disabled={testing} onClick={() => void runTest(true)} data-testid="va-ai-test2">{testing ? 'Testing…' : 'Test AI connection'}</Button>}
-            <span className="tiny" data-testid="va-voice-status">{naturalVoice.available && bp.engine !== 'device'
+            <span className="tiny" data-testid="va-voice-status">{naturalVoice.available && bp.engine !== 'device' && naturalVoice.langs.includes(lang)
               ? `Voice: natural voice (${naturalVoice.provider || 'server'})${naturalVoice.lastError ? ` — last problem: ${naturalVoice.lastError}, the device voice was used` : ''}.`
               : `Voice: this device’s voice${curVoice ? ` (${curVoice.name})` : ''}.`}</span>
             <details className="small" data-testid="va-voice-settings">

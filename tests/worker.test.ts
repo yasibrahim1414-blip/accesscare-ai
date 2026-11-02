@@ -50,7 +50,7 @@ test('worker: conversation prompts, answer size, natural voice route and status 
     assert.equal(JSON.parse(sent[1].body).max_tokens, 1200, 'answer size is capped');
     // status: tells which services exist, never the keys
     r = await worker.fetch(new Request('https://w/status', { headers: { origin: 'https://app.example' } }), full);
-    const st = await r.json(); assert.deepEqual(st, { version: 8, db: false, ai: true, model: 'claude-haiku-5-5', tts: true, ttsProvider: 'Azure AI Speech', ttsLangs: ['en', 'ar', 'fr', 'ur', 'hi'] });
+    const st = await r.json(); assert.deepEqual(st, { version: 9, db: false, ai: true, model: 'claude-haiku-5-5', tts: true, ttsProvider: 'Azure AI Speech', ttsLangs: ['ar', 'en', 'fr', 'ur', 'hi'], stt: false, sttProvider: null });
     assert.doesNotMatch(JSON.stringify(st), /secret/);
     assert.equal((await (await worker.fetch(new Request('https://w/status', { headers: { origin: 'https://app.example' } }), env)).json()).tts, false);
     // tts
@@ -111,4 +111,36 @@ test('worker: a photo only for the medicine-box reader, type- and size-checked; 
     assert.equal(r.status, 200, 'interpreter prompt accepted');
     assert.equal(typeof sent[1].messages[0].content, 'string', 'text-only request stays a string');
   } finally { globalThis.fetch = orig; }
+});
+
+test('worker v9: Whisper speech-to-text and Workers AI voices through the AI binding (no other account)', async () => {
+  const calls: { model: string; input: any }[] = [];
+  const mp3 = btoa(String.fromCharCode(...new Array(200).fill(0x49)));
+  const AI = { run: async (model: string, input: any) => {
+    calls.push({ model, input });
+    if (model.includes('whisper')) return { text: '  nouvelle   consultation ' };
+    if (model.startsWith('elevenlabs')) { if (input.language_code === 'hi') throw new Error('billing'); return { audio: mp3 }; }
+    if (model.includes('melotts')) return { audio: mp3 };
+    throw new Error('unknown');
+  } };
+  const e = { ...env, AI };
+  const post = (path: string, body: unknown) => new Request(`https://w${path}`, { method: 'POST', headers: { origin: 'https://app.example', 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const st = await (await worker.fetch(new Request('https://w/status', { headers: { origin: 'https://app.example' } }), e)).json();
+  assert.equal(st.stt, true); assert.equal(st.tts, true); assert.equal(st.ttsProvider, 'Cloudflare Workers AI');
+  assert.deepEqual(st.ttsLangs.sort(), ['ar', 'en', 'fr', 'hi'], 'Urdu is not offered by these voices (the device voice is used)');
+  // speech to text
+  let r = await worker.fetch(post('/stt', { audio: 'data:audio/webm;base64,' + btoa('abc'), lang: 'fr' }), e);
+  assert.equal(r.status, 200); assert.deepEqual(await r.json(), { text: 'nouvelle consultation' });
+  assert.equal(calls[0].model, '@cf/openai/whisper-large-v3-turbo'); assert.equal(calls[0].input.language, 'fr'); assert.equal(calls[0].input.audio, btoa('abc'));
+  assert.equal((await worker.fetch(post('/stt', { audio: 'not base64 !!' }), e)).status, 400);
+  assert.equal((await worker.fetch(post('/stt', { audio: 'A'.repeat(2_000_004) }), e)).status, 400, 'size limit');
+  assert.equal((await worker.fetch(post('/stt', { audio: btoa('abc') }), env)).status, 501, 'no binding → the browser keeps its own recognizer');
+  // voices
+  r = await worker.fetch(post('/tts', { text: 'مرحبا', lang: 'ar' }), e);
+  assert.equal(r.status, 200); assert.equal(r.headers.get('content-type'), 'audio/mpeg'); assert.equal((await r.arrayBuffer()).byteLength, 200);
+  assert.equal(calls.at(-1)!.model, 'elevenlabs/eleven-multilingual-v2'); assert.equal(calls.at(-1)!.input.language_code, 'ar');
+  r = await worker.fetch(post('/tts', { text: 'Bonjour', lang: 'fr' }), e); assert.equal(r.status, 200);
+  r = await worker.fetch(post('/tts', { text: 'नमस्ते', lang: 'hi' }), e);
+  assert.equal(r.status, 502, 'provider failed → the app falls back to the device voice');
+  r = await worker.fetch(post('/tts', { text: 'سلام', lang: 'ur' }), e); assert.equal(r.status, 501);
 });
