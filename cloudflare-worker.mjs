@@ -5,7 +5,8 @@
 // AccessCare's own requests.
 //
 //   POST /        → Claude (only AccessCare's fixed prompts; size-limited; a photo only for the medicine-package reader)
-//   POST /tts     → natural speech from Azure AI Speech (optional; mp3)
+//   POST /tts     → natural speech (optional; mp3): Azure AI Speech if configured, otherwise Cloudflare Workers AI
+//   POST /stt     → speech to text with Whisper on Cloudflare Workers AI (optional; for browsers that can't do it themselves)
 //   POST /fda     → FDA drug label lookup by generic name (openFDA; only a medicine name is sent)
 //   POST /db      → shared storage for the web version (optional; needs a D1 database bound as DB).
 //                   Stores only what the app already encrypted end to end; each account writes only its own paths.
@@ -20,6 +21,11 @@
 //     AZURE_SPEECH_REGION  (Text)    its region, e.g. uaenorth or westeurope
 //     TTS_VOICE_AR / _EN / _FR / _UR / _HI (Text) voice names (defaults ar-EG-SalmaNeural, en-US-JennyNeural,
 //     fr-FR-DeniseNeural, ur-PK-UzmaNeural, hi-IN-SwaraNeural)
+//   optional, for listening in every browser and natural voices without any other account:
+//     Settings → Bindings → Add → Workers AI → Variable name: AI → Deploy.
+//     Speech to text: Whisper (all five languages). Voices: ElevenLabs multilingual v2 (English, Arabic, French, Hindi)
+//     and MeloTTS (English, French) through Workers AI. Audio is turned into text and not stored here.
+//     TTS_ELEVEN_VOICE (Text, optional) another ElevenLabs voice id. WORKERS_AI_TTS = off (Text) keeps listening but not the voices.
 //   optional: MODEL (default claude-haiku-5-5)
 //   optional, to sync patients and doctors across devices on the website:
 //     Settings → Bindings → Add → D1 database → Variable name: DB → choose (or create) a database → Deploy.
@@ -45,8 +51,10 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_IMAGE_B64 = 1_600_000; // about 1.2 MB of image
 const CLINICAL = 'You support a licensed doctor reviewing a patient-approved symptom report.';
 const MAX_PROMPT = 12000;
-const VERSION = 8; // the app checks this to tell you when the worker code is out of date
+const VERSION = 9; // the app checks this to tell you when the worker code is out of date
 const MAX_TTS = 1500;
+const MAX_AUDIO_B64 = 2_000_000; // about 1.5 MB of recorded speech (a short answer)
+const LANGS = ['ar', 'en', 'fr', 'ur', 'hi'];
 
 const DEFAULT_ORIGINS = ['https://yasibrahim1414-blip.github.io'];
 const MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-haiku-4-5', 'claude-sonnet-4-5'];
@@ -196,6 +204,45 @@ export async function handleDb(request, body, env, headers) {
   return json({ error: 'bad_request' }, 400, headers);
 }
 
+// ================================================================ Workers AI speech (optional binding env.AI)
+const ELEVEN = 'elevenlabs/eleven-multilingual-v2';
+const ELEVEN_LANGS = ['en', 'ar', 'fr', 'hi'];
+const MELO_LANGS = ['en', 'fr'];
+const azureOn = (env) => !!(env.AZURE_SPEECH_KEY && env.AZURE_SPEECH_REGION);
+/** languages the server can speak, best provider first */
+export function ttsPlan(env) {
+  if (azureOn(env)) return { provider: 'Azure AI Speech', langs: [...LANGS] };
+  if (env.AI && env.WORKERS_AI_TTS !== 'off') return { provider: 'Cloudflare Workers AI', langs: [...new Set([...ELEVEN_LANGS, ...MELO_LANGS])] };
+  return { provider: null, langs: [] };
+}
+function b64ToBytes(b64) { const bin = atob(b64); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
+/** audio from a Workers AI answer, whatever shape it comes in (base64, bytes, stream, or a URL) */
+async function audioOf(r) {
+  if (!r) return null;
+  if (r instanceof ReadableStream || r instanceof ArrayBuffer || r instanceof Uint8Array) return new Response(r).arrayBuffer();
+  const a = r.audio ?? r.result?.audio;
+  if (typeof a === 'string') {
+    if (/^https?:\/\//.test(a)) { const f = await fetch(a); return f.ok ? f.arrayBuffer() : null; }
+    return b64ToBytes(a.replace(/^data:audio\/[a-z0-9.+-]+;base64,/, '')).buffer;
+  }
+  if (a instanceof ReadableStream || a instanceof ArrayBuffer || a instanceof Uint8Array) return new Response(a).arrayBuffer();
+  return null;
+}
+async function workersAiSpeech(env, text, lang) {
+  const tries = [];
+  if (ELEVEN_LANGS.includes(lang)) tries.push(() => env.AI.run(ELEVEN, { text, voice_id: env.TTS_ELEVEN_VOICE || 'JBFqnCBsd6RMkjVDRZzb', language_code: lang, output_format: 'mp3_44100_128' }));
+  if (MELO_LANGS.includes(lang)) tries.push(() => env.AI.run('@cf/myshell-ai/melotts', { prompt: text, lang }));
+  for (const t of tries) {
+    try { const buf = await audioOf(await t()); if (buf && buf.byteLength > 100) return buf; } catch { /* next provider */ }
+  }
+  return null;
+}
+async function transcribe(env, audioB64, lang) {
+  const r = await env.AI.run('@cf/openai/whisper-large-v3-turbo', { audio: audioB64, task: 'transcribe', vad_filter: true, ...(LANGS.includes(lang) ? { language: lang } : {}) });
+  const text = typeof r?.text === 'string' ? r.text : Array.isArray(r?.segments) ? r.segments.map((x) => x.text).join(' ') : '';
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -206,7 +253,7 @@ export default {
     if (!c.ok) return json({ error: 'origin_not_allowed' }, 403, c.headers);
 
     if (url.pathname.endsWith('/status') && request.method === 'GET') {
-      return json({ version: VERSION, db: !!env.DB || env.MEMORY_DB === '1', ai: !!apiKey(env), model: env.MODEL || 'claude-haiku-5-5', tts: !!(env.AZURE_SPEECH_KEY && env.AZURE_SPEECH_REGION), ttsProvider: env.AZURE_SPEECH_KEY ? 'Azure AI Speech' : null, ttsLangs: ['en', 'ar', 'fr', 'ur', 'hi'] }, 200, c.headers);
+      return json({ version: VERSION, db: !!env.DB || env.MEMORY_DB === '1', ai: !!apiKey(env), model: env.MODEL || 'claude-haiku-5-5', tts: ttsPlan(env).langs.length > 0, ttsProvider: ttsPlan(env).provider, ttsLangs: ttsPlan(env).langs, stt: !!env.AI, sttProvider: env.AI ? 'Whisper (Cloudflare Workers AI)' : null }, 200, c.headers);
     }
     if (request.method !== 'POST') return json({ error: 'method' }, 405, c.headers);
     let body;
@@ -214,11 +261,23 @@ export default {
 
     if (url.pathname.endsWith('/db')) return handleDb(request, body, env, c.headers);
 
+    if (url.pathname.endsWith('/stt')) {
+      if (!env.AI) return json({ error: 'stt_not_configured' }, 501, c.headers);
+      const audio = typeof body?.audio === 'string' ? body.audio.replace(/^data:[^,]*,/, '') : '';
+      if (!audio || audio.length > MAX_AUDIO_B64 || !/^[A-Za-z0-9+/=]+$/.test(audio)) return json({ error: 'bad_audio' }, 400, c.headers);
+      try { return json({ text: await transcribe(env, audio, body?.lang) }, 200, c.headers); } catch { return json({ error: 'stt_upstream' }, 502, c.headers); }
+    }
+
     if (url.pathname.endsWith('/tts')) {
-      if (!env.AZURE_SPEECH_KEY || !env.AZURE_SPEECH_REGION) return json({ error: 'tts_not_configured' }, 501, c.headers);
       const text = typeof body?.text === 'string' ? body.text.trim() : '';
       if (!text || text.length > MAX_TTS) return json({ error: 'bad_text' }, 400, c.headers);
-      const lang = ['ar', 'en', 'fr', 'ur', 'hi'].includes(body?.lang) ? body.lang : 'en';
+      const lang = LANGS.includes(body?.lang) ? body.lang : 'en';
+      if (!azureOn(env)) {
+        if (!env.AI || !ttsPlan(env).langs.includes(lang)) return json({ error: 'tts_not_configured' }, 501, c.headers);
+        const buf = await workersAiSpeech(env, text, lang);
+        if (!buf) return json({ error: 'tts_upstream' }, 502, c.headers);
+        return new Response(buf, { status: 200, headers: { ...c.headers, 'content-type': 'audio/mpeg', 'cache-control': 'no-store' } });
+      }
       const r = await fetch(env.AZURE_TTS_URL || `https://${env.AZURE_SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`, {
         method: 'POST',
         headers: { 'Ocp-Apim-Subscription-Key': env.AZURE_SPEECH_KEY, 'Content-Type': 'application/ssml+xml', 'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3', 'User-Agent': 'accesscare-ai' },
