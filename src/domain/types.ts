@@ -238,7 +238,7 @@ export interface Message {
   senderRole: Role;
   body: string;
   /** doctors can ask Yes/No questions the patient answers with one tap */
-  kind: 'text' | 'yes_no_question' | 'clarification' | 'clarification_answer' | 'prescription' | 'followup' | 'followup_answer' | 'visit_summary' | 'body_probe' | 'body_probe_answer' | 'teachback';
+  kind: 'text' | 'yes_no_question' | 'clarification' | 'clarification_answer' | 'prescription' | 'followup' | 'followup_answer' | 'visit_summary' | 'body_probe' | 'body_probe_answer' | 'teachback' | 'call';
   createdAt: string;
   meta?: MessageMeta;
 }
@@ -271,6 +271,20 @@ export interface MessageMeta {
   probeAnswer?: import('./interact').ProbeAnswer;
   /** the patient's explanation of the plan, checked against what the doctor wrote */
   teachback?: import('./interact').TeachBack;
+  /** live call set-up between the two devices (offer, answer, end); the call itself is not stored */
+  call?: CallSignal;
+}
+
+/** One step of setting up a live call. The audio and video go directly between the two devices and are never stored. */
+export interface CallSignal {
+  id: string;
+  step: 'offer' | 'answer' | 'end';
+  media: 'video' | 'audio';
+  /** WebRTC session description (offer / answer) */
+  sdp?: string;
+  /** end: why (hung up, declined, missed, failed) and how long it lasted */
+  reason?: 'hangup' | 'declined' | 'missed' | 'failed';
+  seconds?: number;
 }
 
 export interface DoctorNote {

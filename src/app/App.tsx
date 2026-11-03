@@ -1,3 +1,4 @@
+import { CallLayer } from '../screens/shared/LiveCall';
 import React from 'react';
 import { useApp, type Route } from './AppContext';
 import { SideNav, TabBar, UtilityBar, TAB_ROUTES, useFocusOnNavigate } from './Shell';
@@ -94,6 +95,7 @@ export function App() {
         {/* after the screen in reading order (so a screen's own first control comes first), shown on top */}
         <UtilityBar strip={strip} showBlind={!voice} />
         {me?.profile.role === 'patient' && <><CareSync /><MedReminder /></>}
+        {(me?.profile.role === 'patient' || me?.profile.role === 'doctor') && backend.shared && <CallLayer />}
         {showTabs && <TabBar />}
       </div>
     </div>

@@ -54,13 +54,16 @@ export function useLang(): Lang {
   return l;
 }
 
+/** a sentence added to another (" Careful: …") keeps its leading space in every language */
+const keepSpaces = (en: string, t: string) => (/^\s/.test(en) && !/^\s/.test(t) ? ' ' : '') + t + (/\s$/.test(en) && !/\s$/.test(t) ? ' ' : '');
+
 /**
  * Text built in code, written in English and Arabic. French, Urdu and Hindi come from
  * their dictionaries (keyed by the English text); with no entry the English is used.
  * `vars` fill {name} placeholders after translation.
  */
 export function tr(en: string, ar: string, l: string = current, vars?: Record<string, string | number>): string {
-  let s = l === 'ar' ? ar : l === 'fr' || l === 'ur' || l === 'hi' ? (translateTo(en, l) ?? en) : en;
+  let s = l === 'ar' ? ar : l === 'fr' || l === 'ur' || l === 'hi' ? keepSpaces(en, translateTo(en, l) ?? en) : en;
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v));
   return s;
 }

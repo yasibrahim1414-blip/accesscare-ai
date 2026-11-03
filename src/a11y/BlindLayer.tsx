@@ -216,7 +216,7 @@ export function BlindProvider({ children }: { children: React.ReactNode }) {
     let best: { body: string; at: string; who: string } | null = null;
     for (const v of list) {
       for (const msg of await backend.listMessages(v.consultation.id)) {
-        const fromOther = doctor ? msg.senderRole === 'patient' : msg.senderRole === 'doctor';
+        const fromOther = msg.kind !== 'call' && (doctor ? msg.senderRole === 'patient' : msg.senderRole === 'doctor');
         if (fromOther && (!best || msg.createdAt > best.at)) best = { body: msg.body, at: msg.createdAt, who: doctor ? v.patient.fullName : (v.doctor?.fullName ?? L('your doctor', 'دكتورك')) };
       }
     }

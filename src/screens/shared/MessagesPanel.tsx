@@ -10,6 +10,9 @@ import { mustConfirm } from '../../services/signal/SignalEngine';
 import { FollowUpAnswerBubble, FollowUpAnswerFlow, FollowUpRequestBubble, VisitSummaryCard, isDue } from './FollowUp';
 import { ProbeComposer, ProbeRequestBubble, ProbeAnswerBubble, ProbeAnswerFlow, TeachBackFlow, TeachBackBubble } from './Interact';
 import { teachBackDue } from '../../services/teachback/check';
+import { CallButtons } from './LiveCall';
+import { callLine } from '../../services/call/call';
+import { tr } from '../../i18n/lang';
 
 const SYMBOL: Record<string, string> = { Yes: '👍', No: '👎', 'Not sure': '❔' };
 
@@ -28,8 +31,8 @@ export function clarifiedAddenda(msgs: Message[]) {
 }
 
 /** Consultation-scoped messaging with structured clarification requests. Authorization is enforced by the backend. */
-export function MessagesPanel({ consultationId, canSend, disabledReason, report, patientPrefs, signalSession }: {
-  consultationId: string; canSend: boolean; disabledReason?: string; report?: StructuredReport;
+export function MessagesPanel({ consultationId, canSend, disabledReason, report, patientPrefs, signalSession, otherName }: {
+  consultationId: string; canSend: boolean; disabledReason?: string; report?: StructuredReport; otherName?: string;
   patientPrefs?: CommunicationPreferences; signalSession?: boolean;
 }) {
   const { backend, me, toast } = useApp();
@@ -56,13 +59,14 @@ export function MessagesPanel({ consultationId, canSend, disabledReason, report,
     finally { setSending(false); }
   };
 
-  const list = msgs.data ?? [];
+  const all = msgs.data ?? [];
+  const list = all.filter((m) => m.kind !== 'call' || m.meta?.call?.step === 'end'); // call set-up steps are not conversation
   const answeredIds = new Set(list.filter((m) => m.kind === 'clarification_answer' || m.kind === 'followup_answer' || m.kind === 'body_probe_answer').map((m) => m.meta?.replyTo));
   const openProbes = list.filter((m) => m.kind === 'body_probe' && m.meta?.probe && !answeredIds.has(m.id));
   const tbDue = !isDoctor && teachBackDue(list);
   const dueFollowUps = list.filter((m) => m.kind === 'followup' && isDue(m) && !answeredIds.has(m.id));
   const legacyQ = [...list].reverse().find((m) => m.kind === 'yes_no_question');
-  const legacyAnswered = legacyQ && list.some((m) => m.createdAt > legacyQ.createdAt && m.senderRole === 'patient');
+  const legacyAnswered = legacyQ && list.some((m) => m.kind !== 'call' && m.createdAt > legacyQ.createdAt && m.senderRole === 'patient');
   const openRequests = list.filter((m) => m.kind === 'clarification' && !answeredIds.has(m.id));
 
   return (
@@ -73,6 +77,7 @@ export function MessagesPanel({ consultationId, canSend, disabledReason, report,
         {msgs.data && list.length === 0 && <p className="small muted" style={{ textAlign: 'center', padding: 12 }}>No messages yet. Messages are linked to this consultation only.</p>}
         {list.map((m) => {
           const mine = m.senderId === me?.profile.id;
+          if (m.kind === 'call') { const line = callLine(m, (en, ar) => tr(en, ar)); return line ? <p key={m.id} className="call-line tiny muted" data-testid="call-line"><LuVideo aria-hidden /> {line} · {fmtDate(m.createdAt)}</p> : null; }
           return (
             m.kind === 'prescription' && m.meta?.rx ? <PrescriptionCard key={m.id} m={m} /> :
             m.kind === 'visit_summary' && m.meta?.summary ? <VisitSummaryCard key={m.id} m={m} /> :
@@ -137,7 +142,8 @@ export function MessagesPanel({ consultationId, canSend, disabledReason, report,
           {err && <Banner kind="danger">{err}</Banner>}
         </div>
       ) : disabledReason ? <p className="small muted">{disabledReason}</p> : null}
-      <div className="row tiny muted" style={{ gap: 8 }}><LuVideo aria-hidden /> Video calls are not available in this prototype. {backend.shared ? 'Messages sync between devices automatically.' : 'Offline demo: messages stay in this browser.'}</div>
+      <CallButtons consultationId={consultationId} otherName={otherName ?? (isDoctor ? 'the patient' : 'your doctor')} canCall={canSend} />
+      <div className="row tiny muted" style={{ gap: 8 }}>{backend.shared ? 'Messages sync between devices automatically.' : 'Offline demo: messages stay in this browser.'}</div>
     </div>
   );
 }

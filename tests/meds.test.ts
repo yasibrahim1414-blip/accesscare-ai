@@ -97,6 +97,35 @@ test('medicine box: AI reads text only; the match uses fixed rules; strength dif
   assert.deepEqual(strengthOf('500mg'), { value: 500, unit: 'mg' });
 });
 
+test('medicine box: real-world boxes — grams vs mg, brand + active ingredient, Arabic and English print, the doctor’s own prescription', () => {
+  const plans = plansFromMessages([{ consultationId: 'c1', messages: [
+    rxMsg('rx1', 'Paracetamol', '500 mg', 'every 8 hours', '3 days', at(2026, 10, 25)),
+    rxMsg('rx2', 'Amoxicillin', '1 g', 'twice daily', '7 days', at(2026, 10, 25)),
+  ] }], at(2026, 10, 26));
+  // Panadol box: brand + active ingredient, Arabic and Latin print
+  const panadol = checkBox(cleanBoxReading({ readable: true, names: ['Panadol', 'Paracetamol'], strength: '500 mg', text: 'بنادول Panadol Paracetamol 500 mg 24 أقراص' }), plans);
+  assert.equal(panadol.kind, 'match'); assert.equal(panadol.kind === 'match' && panadol.plan.name, 'Paracetamol'); assert.equal(panadol.kind === 'match' && panadol.strength, 'same');
+  // 1000 mg box for a 1 g prescription is the same strength; 500 mg is not
+  const amox = checkBox(cleanBoxReading({ readable: true, names: ['Amoxicillin'], strength: '1000 mg', text: 'Amoxicillin 1000mg' }), plans);
+  assert.equal(amox.kind === 'match' && amox.strength, 'same');
+  const amox5 = checkBox(cleanBoxReading({ readable: true, names: ['Amoxil', 'Amoxicillin'], strength: '500 mg', text: '' }), plans);
+  assert.equal(amox5.kind === 'match' && amox5.strength, 'different');
+  // a box with no strength printed: matched, strength not claimed
+  const noS = checkBox(cleanBoxReading({ readable: true, names: ['Paracetamol'], strength: '', text: 'Paracetamol tablets' }), plans);
+  assert.equal(noS.kind === 'match' && noS.strength, 'unknown');
+  // another medicine is never matched to a prescription
+  const aug = checkBox(cleanBoxReading({ readable: true, names: ['Augmentin'], ingredients: ['Amoxicillin', 'Clavulanic acid'], strength: '1 g', text: '' }), plans);
+  assert.equal(aug.kind, 'match'); assert.deepEqual(aug.kind === 'match' && aug.extra, ['Clavulanic acid'], 'a combination product is flagged, not passed as the prescribed medicine');
+  assert.deepEqual(panadol.kind === 'match' && panadol.extra, []);
+  const pan2 = checkBox(cleanBoxReading({ readable: true, names: ['Panadol'], ingredients: ['Paracetamol'], strength: '500mg', text: '' }), plans);
+  assert.equal(pan2.kind === 'match' && pan2.plan.name, 'Paracetamol', 'brand name only + ingredient list: matched by the ingredient');
+  assert.deepEqual(pan2.kind === 'match' && pan2.extra, []);
+  assert.equal(checkBox(cleanBoxReading({ readable: true, names: ['Aspirin'], strength: '100 mg', text: 'Aspirin' }), plans).kind, 'not_prescribed');
+  // no prescription sent yet: nothing can match
+  assert.equal(checkBox(cleanBoxReading({ readable: true, names: ['Paracetamol'], strength: '500 mg', text: '' }), []).kind, 'not_prescribed');
+  assert.match(boxPrompt(), /Latin-letter names/);
+});
+
 test('interpreter: numbers are checked in every translation', () => {
   assert.ok(interpPrompt('خد حباية', 'ar', 'en', 'doctor').startsWith(INTERP_PREFIX));
   assert.deepEqual(numbersIn('خد ٢ حباية لمدة خمسة أيام'), ['2', '5']);

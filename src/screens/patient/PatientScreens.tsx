@@ -243,7 +243,7 @@ export function PatientDetail({ id }: { id: string }) {
           </>}
         </>}
         {tab === 'messages' && canMessage && (
-          <MessagesPanel consultationId={c.id} canSend={!!doctor.data && doctor.data.doctorId === v.data.doctor?.doctorId}
+          <MessagesPanel consultationId={c.id} otherName={v.data.doctor?.fullName} canSend={!!doctor.data && doctor.data.doctorId === v.data.doctor?.doctorId}
             disabledReason="You are no longer connected to this doctor, so new messages can’t be sent." />
         )}
       </div></div>

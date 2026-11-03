@@ -1,6 +1,6 @@
 // Shared validation for data every backend accepts from the app.
 
-import type { AuditEvent, Message, MessageMeta, Role } from '../../domain/types';
+import type { AuditEvent, CallSignal, Message, MessageMeta, Role } from '../../domain/types';
 import type { Reconstruction } from '../../domain/reconstruction';
 import { cleanRxMeta, cleanFollowUp, cleanFollowUpAnswer, cleanVisitSummary } from '../../domain/clinical';
 import { cleanProbe, cleanProbeAnswer, cleanTeachBack } from '../../domain/interact';
@@ -10,13 +10,32 @@ const clip = (s: unknown, max: number) => (typeof s === 'string' ? s.trim().slic
 
 /** Who may send which kind of message. */
 export function messageKindFor(role: Role, kind: Message['kind'] | undefined): Message['kind'] {
-  const doctor: Message['kind'][] = ['text', 'yes_no_question', 'clarification', 'prescription', 'followup', 'visit_summary', 'body_probe'];
-  const patient: Message['kind'][] = ['text', 'clarification_answer', 'followup_answer', 'body_probe_answer', 'teachback'];
+  const doctor: Message['kind'][] = ['text', 'yes_no_question', 'clarification', 'prescription', 'followup', 'visit_summary', 'body_probe', 'call'];
+  const patient: Message['kind'][] = ['text', 'clarification_answer', 'followup_answer', 'body_probe_answer', 'teachback', 'call'];
   const k = kind ?? 'text';
   return (role === 'doctor' ? doctor : patient).includes(k) ? k : 'text';
 }
 
+/** A live-call set-up step: only known fields, a session description of reasonable size. */
+export function cleanCall(c: unknown): CallSignal | null {
+  if (!c || typeof c !== 'object') return null;
+  const x = c as Record<string, unknown>;
+  if (typeof x.id !== 'string' || !/^call_[a-z0-9]{6,32}$/.test(x.id)) return null;
+  if (x.step !== 'offer' && x.step !== 'answer' && x.step !== 'end') return null;
+  const media = x.media === 'audio' ? 'audio' : 'video';
+  const out: CallSignal = { id: x.id, step: x.step, media };
+  if (x.step !== 'end') {
+    if (typeof x.sdp !== 'string' || x.sdp.length > 24000 || !x.sdp.startsWith('v=0')) return null;
+    out.sdp = x.sdp;
+  } else {
+    out.reason = (['hangup', 'declined', 'missed', 'failed'] as const).find((r) => r === x.reason) ?? 'hangup';
+    if (typeof x.seconds === 'number' && x.seconds >= 0 && x.seconds < 86400) out.seconds = Math.round(x.seconds);
+  }
+  return out;
+}
+
 export function cleanMeta(meta: MessageMeta | undefined, kind: Message['kind']): MessageMeta | undefined {
+  if (kind === 'call') { const c = cleanCall(meta?.call); return c ? { call: c } : undefined; }
   if (kind === 'prescription') { const rx = cleanRxMeta(meta?.rx); return rx ? { rx } : undefined; }
   if (kind === 'followup') { const f = cleanFollowUp(meta?.followup); return f ? { followup: f } : undefined; }
   if (kind === 'followup_answer') { const a = cleanFollowUpAnswer(meta?.followupAnswer); return a ? { followupAnswer: a, replyTo: a.replyTo, approvedByPatient: true } : undefined; }
@@ -55,6 +74,7 @@ export function cleanAudit(list: AuditEvent[] | undefined): AuditEvent[] | undef
 
 /** A prescription message must carry a complete, doctor-approved prescription. */
 export function requireValidRx(kind: Message['kind'], meta: MessageMeta | undefined) {
+  if (kind === 'call' && !meta?.call) throw new BackendError('invalid', 'Call set-up data is missing.');
   if (kind === 'prescription' && !meta?.rx) throw new BackendError('invalid', 'A prescription can only be sent after the doctor approves it (medicine, dose, approval).');
   if (kind === 'followup' && !meta?.followup) throw new BackendError('invalid', 'A follow-up needs a date.');
   if (kind === 'followup_answer' && !meta?.followupAnswer) throw new BackendError('invalid', 'The answer must be reviewed and approved by the patient.');

@@ -105,6 +105,7 @@ export function DoctorOverview() {
       const ms = await backend.listMessages(v.consultation.id).catch(() => []);
       const out: { id: string; cid: string; patient: string; text: string; open: boolean; at: string }[] = [];
       for (const m of ms) {
+        if (m.kind === 'call') continue;
         if (m.kind === 'clarification' && !ms.some((x) => x.meta?.replyTo === m.id)) out.push({ id: m.id, cid: v.consultation.id, patient: v.patient.fullName, text: `You asked: ${m.body}`, open: true, at: m.createdAt });
         if (m.senderRole === 'patient') out.push({ id: m.id, cid: v.consultation.id, patient: v.patient.fullName, text: m.kind === 'followup_answer' && m.meta?.followupAnswer ? `Follow-up: ${followUpFlags(m.meta.followupAnswer).filter((f) => f.level !== 'info').map((f) => (f.level === 'emergency' ? '⚠ ' : '') + f.text).join(' ') || 'answered, no warning'}` : m.kind === 'clarification_answer' ? `Answered${m.meta?.itemLabel ? ` (${m.meta.itemLabel})` : ''}: ${m.meta?.raw ?? m.body}` : m.body, open: false, at: m.createdAt });
       }
@@ -345,7 +346,7 @@ export function DoctorWorkspace({ id }: { id: string }) {
           <Field id="doctor-note" label="Add a note" multiline value={note} onChange={setNote} maxLength={2000} />
           <Button disabled={!note.trim()} onClick={async () => { try { await backend.addNote(id, note); setNote(''); notes.reload(); } catch (e) { toast((e as Error).message); } }}><LuClipboardCheck aria-hidden /> Save note</Button>
         </>}
-        {tab === 'messages' && <MessagesPanel consultationId={id} canSend report={a.report} patientPrefs={prefs} signalSession={c.kind === 'signal'} />}
+        {tab === 'messages' && <MessagesPanel consultationId={id} canSend otherName={v.data.patient.fullName} report={a.report} patientPrefs={prefs} signalSession={c.kind === 'signal'} />}
         {tab === 'brief' && <BriefPanel patientId={v.data.patient.id} aiAllowed={!!a.report.aiConsent} />}
       </div></div>
     </>

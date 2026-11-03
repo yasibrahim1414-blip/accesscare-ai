@@ -35,6 +35,13 @@ with sync_playwright() as p:
         over = pg.evaluate('document.documentElement.scrollWidth - document.documentElement.clientWidth')
         assert over <= 1, f'{what}: horizontal overflow {over}px'
     def tab(pg, name): pg.locator('.tab', has_text=name).click()
+    def press_blind(pg):
+        # the shortcut works once the page has finished starting; try again if the first press came too early
+        for _ in range(4):
+            pg.keyboard.press('Alt+Shift+B')
+            try: expect(pg.get_by_test_id('blind-bar')).to_be_visible(timeout=2000); return
+            except AssertionError: pass
+        expect(pg.get_by_test_id('blind-bar')).to_be_visible(timeout=2000)
 
     # ---------- three people ----------
     doc = device('u-doc', 'Layla', 1280, 900)
@@ -146,10 +153,11 @@ with sync_playwright() as p:
     v = box('naproxen'); expect(v).to_have_attribute('data-kind', 'match'); expect(v).to_contain_text('This is your Naproxen, 250 mg')
     assert 'This is your Naproxen' in pat.evaluate("window.__spoken.join(' ')"), 'said out loud'
     v = box('naproxen500'); expect(v).to_contain_text('the box says 500 mg, your prescription says 250 mg', timeout=15000)
+    v = box('vimovo'); expect(v).to_contain_text('this box also contains Esomeprazole', timeout=15000); assert pat.get_by_test_id('box-taken').count() == 0, 'no “taken” button for a different product'
     v = box('ibuprofen'); expect(v).to_have_attribute('data-kind', 'not_prescribed', timeout=15000); expect(v).to_contain_text('Do not take it before checking')
     v = box('blurry'); expect(v).to_have_attribute('data-kind', 'unreadable', timeout=15000)
     no_overflow(pat, 'box check')
-    ok('medicine box: Claude (stand-in) only read the printed text; AccessCare matched it — “This is your Naproxen, 250 mg” (spoken), a 500 mg box flagged, Ibuprofen “not in your prescriptions”, a blurry photo “could not read”')
+    ok('medicine box: Claude (stand-in) only read the printed text; AccessCare matched it — “This is your Naproxen, 250 mg” (spoken), a 500 mg box flagged, a naproxen + esomeprazole combination flagged, Ibuprofen “not in your prescriptions”, a blurry photo “could not read”')
 
     # ---------- wound photos ----------
     pat.get_by_label('Go back').first.click(); pat.get_by_test_id('care-p.photos').click()
@@ -224,7 +232,7 @@ with sync_playwright() as p:
 
     # ---------- Blind Mode: everything by voice ----------
     pat.goto(f'{BASE}?uid=u-pat&name=Omar'); expect(pat.locator('.tab')).to_have_count(6, timeout=20000)
-    pat.keyboard.press('Alt+Shift+B'); expect(pat.get_by_test_id('blind-bar')).to_be_visible(timeout=5000)
+    press_blind(pat)
     pat.get_by_test_id('blind-mic-allow').click(); pat.wait_for_function('window.__recStarts > 0')
     def say(text, expect_re=None, timeout=15000):
         pat.evaluate('window.__spoken.length = 0'); pat.evaluate('(t) => window.__heard.push(t)', text)

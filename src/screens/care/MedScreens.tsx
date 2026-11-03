@@ -323,8 +323,9 @@ export function BoxCheckScreen() {
     const p = v.plan;
     const base = L(`This is your ${p.name}${p.dose ? `, ${p.dose}` : ''}. ${p.frequency}${p.instructions ? `. ${p.instructions}` : ''}.`, `ده دواك ${p.name}${p.dose ? `، ${p.dose}` : ''}. ${p.frequency}${p.instructions ? `. ${p.instructions}` : ''}.`);
     const str = v.strength === 'different' ? L(` Careful: the box says ${v.boxStrength}, your prescription says ${p.dose}. Check with your pharmacist before taking it.`, ` خلي بالك: العلبة مكتوب عليها ${v.boxStrength} والروشتة ${p.dose}. اسأل الصيدلي قبل ما تاخده.`) : '';
+    const ex = v.extra.length ? tr(' Careful: this box also contains {list}, which is not in your prescription. Check with your pharmacist before taking it.', ' خلي بالك: العلبة دي فيها كمان {list}، وده مش في روشتتك. اسأل الصيدلي قبل ما تاخده.', lang, { list: v.extra.join(', ') }) : '';
     const ended = p.active ? '' : L(' This course has ended.', ' الكورس ده خلص.');
-    return base + str + ended;
+    return base + str + ex + ended;
   };
 
   const onPhoto = async (src: Blob | HTMLVideoElement) => {
@@ -355,13 +356,13 @@ export function BoxCheckScreen() {
         {busy && <p className="small" role="status">{L('Reading the box…', 'بقرا العلبة…')}</p>}
         {err && <p className="small danger-text" role="alert">{err}</p>}
         {verdict && (
-          <section className={`card raised box-verdict v-${verdict.kind}${verdict.kind === 'match' && verdict.strength === 'different' ? ' v-warn' : ''}`} role="status" aria-live="polite" data-testid="box-verdict" data-kind={verdict.kind}>
-            <h2 className="title">{verdict.kind === 'match' ? (verdict.strength === 'different' ? <><LuTriangleAlert aria-hidden /> {L('Your medicine — but check the strength', 'دواك — بس اتأكد من التركيز')}</> : <><LuCircleCheck aria-hidden /> {L('This is your medicine', 'ده دواك')}</>) : verdict.kind === 'not_prescribed' ? <><LuCircleX aria-hidden /> {L('Not in your prescriptions', 'مش في روشتاتك')}</> : L('Could not read it', 'مقدرتش أقراها')}</h2>
+          <section className={`card raised box-verdict v-${verdict.kind}${verdict.kind === 'match' && (verdict.strength === 'different' || verdict.extra.length) ? ' v-warn' : ''}`} role="status" aria-live="polite" data-testid="box-verdict" data-kind={verdict.kind}>
+            <h2 className="title">{verdict.kind === 'match' ? (verdict.extra.length ? <><LuTriangleAlert aria-hidden /> {L('Check with your pharmacist: this box has another medicine too', 'اسأل الصيدلي: العلبة دي فيها دوا تاني كمان')}</> : verdict.strength === 'different' ? <><LuTriangleAlert aria-hidden /> {L('Your medicine — but check the strength', 'دواك — بس اتأكد من التركيز')}</> : <><LuCircleCheck aria-hidden /> {L('This is your medicine', 'ده دواك')}</>) : verdict.kind === 'not_prescribed' ? <><LuCircleX aria-hidden /> {L('Not in your prescriptions', 'مش في روشتاتك')}</> : L('Could not read it', 'مقدرتش أقراها')}</h2>
             <p data-no-tr>{sayVerdict(verdict)}</p>
             {readText && <p className="tiny muted">{L('Read on the box:', 'المكتوب على العلبة:')} <span data-no-tr>{readText}</span></p>}
             <div className="row wrap">
               {ttsSupported() && <Button variant="secondary" onClick={() => speak(sayVerdict(verdict))}><LuVolume2 aria-hidden /> {L('Say it again', 'قولها تاني')}</Button>}
-              {slot && verdict.kind === 'match' && verdict.strength !== 'different' && <Button onClick={() => void act(slot.plan, slot.slot, 'taken', { via: 'camera' }).then(() => setVerdict(null))} data-testid="box-taken"><LuCircleCheck aria-hidden /> {L(`Record ${slot.slot} dose as taken`, `سجّل جرعة ${slot.slot} إنها اتاخدت`)}</Button>}
+              {slot && verdict.kind === 'match' && verdict.strength !== 'different' && !verdict.extra.length && <Button onClick={() => void act(slot.plan, slot.slot, 'taken', { via: 'camera' }).then(() => setVerdict(null))} data-testid="box-taken"><LuCircleCheck aria-hidden /> {L(`Record ${slot.slot} dose as taken`, `سجّل جرعة ${slot.slot} إنها اتاخدت`)}</Button>}
             </div>
             <p className="tiny muted">{L('The AI can misread a photo. If anything seems wrong, ask your pharmacist.', 'الذكاء الاصطناعي ممكن يغلط في قراية الصورة. لو حاجة شكلها غلط، اسأل الصيدلي.')}</p>
           </section>

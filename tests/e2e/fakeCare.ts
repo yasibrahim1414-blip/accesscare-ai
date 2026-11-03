@@ -16,6 +16,7 @@ export function fakeInterp(prompt: string): unknown {
 export function fakeBox(kind: string): unknown {
   if (kind === 'naproxen500') return { readable: true, names: ['Naproxen'], strength: '500 mg', form: 'tablet', text: 'Naproxen 500 mg 20 tablets' };
   if (kind === 'ibuprofen') return { readable: true, names: ['Ibuprofen', 'Brufen'], strength: '400 mg', form: 'tablet', text: 'Brufen Ibuprofen 400 mg' };
+  if (kind === 'vimovo') return { readable: true, names: ['Vimovo'], ingredients: ['Naproxen', 'Esomeprazole'], strength: '500 mg / 20 mg', form: 'tablet', text: 'Vimovo naproxen 500 mg esomeprazole 20 mg' };
   if (kind === 'blurry') return { readable: false, names: [], strength: '', form: '', text: '' };
   return { readable: true, names: ['Naprosyn', 'Naproxen'], strength: '', form: 'tablet', text: 'Naproxen tablets' };
 }

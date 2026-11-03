@@ -715,4 +715,23 @@ h2.title svg, h3.title svg { flex: none; }
 .cg-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.6em; font-weight: 700; letter-spacing: .06em; margin: 4px 0; direction: ltr; text-align: start; }
 .brief-sec.sec-urgent { border-color: var(--danger); }
 .brief-sec ul, .alert-card ul { margin: 0; padding-inline-start: 1.2em; display: grid; gap: 6px; }
+
+/* ---------- live call ---------- */
+.call-incoming, .call-window { position: fixed; inset: 0; z-index: 90; display: flex; flex-direction: column; }
+.call-incoming { align-items: center; justify-content: center; background: rgba(15, 59, 64, .72); padding: 16px; }
+.call-card { background: var(--surface, #fff); color: var(--ink, #1b2631); border-radius: 18px; padding: 20px; max-width: 420px; width: 100%; display: grid; gap: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.3); }
+.call-card h2 { margin: 0; font-size: 1.25rem; display: flex; gap: 8px; align-items: center; }
+.call-window { background: #0b1f22; color: #fff; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); gap: 10px; }
+.call-status { margin: 0; font-weight: 600; text-align: center; }
+.call-stage { position: relative; flex: 1; min-height: 0; border-radius: 16px; overflow: hidden; background: #132f33; display: flex; align-items: center; justify-content: center; }
+.call-remote { width: 100%; height: 100%; object-fit: contain; background: #000; }
+.call-local { position: absolute; inset-inline-end: 10px; bottom: 10px; width: 28%; max-width: 160px; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 12px; border: 2px solid rgba(255,255,255,.6); background: #000; }
+.call-avatar { width: 120px; height: 120px; border-radius: 50%; background: var(--teal, #0e7c7b); display: flex; align-items: center; justify-content: center; font-size: 3rem; font-weight: 700; }
+.call-controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.call-chat { background: rgba(255,255,255,.08); border-radius: 12px; padding: 8px; display: grid; gap: 6px; max-height: 32vh; }
+.call-chat-list { overflow: auto; display: grid; gap: 4px; }
+.call-chat-list p { margin: 0; padding: 6px 10px; border-radius: 10px; max-width: 85%; }
+.call-chat-list .mine { background: var(--teal, #0e7c7b); justify-self: end; }
+.call-chat-list .theirs { background: rgba(255,255,255,.16); justify-self: start; }
+.call-line { display: flex; gap: 6px; align-items: center; justify-content: center; margin: 4px 0; }
 `;

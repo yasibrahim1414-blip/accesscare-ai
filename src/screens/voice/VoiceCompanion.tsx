@@ -236,6 +236,7 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
           const msgs: Msg[] = [];
           for (const v of list.filter((x) => x.consultation.status !== 'draft').slice(0, 8)) {
             for (const m of await backend.listMessages(v.consultation.id)) {
+              if (m.kind === 'call') continue; // call set-up, not a message to read
               msgs.push({ from: m.senderRole === 'doctor' ? 'doctor' : 'patient', body: m.body, at: m.createdAt, cid: m.consultationId });
             }
           }

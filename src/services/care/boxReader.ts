@@ -10,6 +10,8 @@ export const VISION_PREFIX = 'You read the printed text on a photo of a medicine
 export interface BoxReading {
   readable: boolean;
   names: string[];
+  /** active ingredients printed on the box (Latin letters when printed) */
+  ingredients: string[];
   strength: string;
   form: string;
   /** printed text, as read */
@@ -20,7 +22,8 @@ export function boxPrompt(): string {
   return `${VISION_PREFIX}
 Task: look at the photo of a medicine box, blister pack or bottle and copy the printed text you can read.
 Rules: copy only what is printed (do not guess names from colours or shapes); if you cannot read a medicine name clearly, set "readable": false. Do not give medical advice.
-Reply with only JSON: {"readable": true|false, "names": ["medicine names printed, brand and generic, max 4"], "strength": "e.g. 500 mg or ''", "form": "tablet|capsule|syrup|cream|injection|drops|other|''", "text": "the main printed words, max 200 characters"}`;
+Boxes often print the name in Arabic and in Latin letters: put the Latin-letter names (brand and active ingredient) in "names" exactly as printed. If only Arabic is printed, copy the Arabic.
+Reply with only JSON: {"readable": true|false, "names": ["medicine names printed, brand and generic, max 4"], "ingredients": ["every active ingredient printed, max 4"], "strength": "e.g. 500 mg or ''", "form": "tablet|capsule|syrup|cream|injection|drops|other|''", "text": "the main printed words, max 200 characters"}`;
 }
 
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
@@ -31,7 +34,8 @@ export function cleanBoxReading(raw: unknown): BoxReading | null {
   const names = Array.isArray(r.names) ? r.names.map((n) => str(n, 60)).filter((n) => n.length >= 2).slice(0, 4) : [];
   const text = str(r.text, 200);
   const readable = r.readable === true && (names.length > 0 || text.length >= 3);
-  return { readable, names, strength: str(r.strength, 30), form: str(r.form, 20), text };
+  const ingredients = Array.isArray(r.ingredients) ? r.ingredients.map((n) => str(n, 60)).filter((n) => n.length >= 2).slice(0, 4) : [];
+  return { readable, names, ingredients, strength: str(r.strength, 30), form: str(r.form, 20), text };
 }
 
 const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9؀-ۿ ]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -48,7 +52,7 @@ function lev(a: string, b: string): number {
 export function namesMedicine(reading: BoxReading, medicine: string): boolean {
   const target = norm(medicine).split(' ').filter((w) => w.length >= 4);
   if (!target.length) return false;
-  const words = norm([...reading.names, reading.text].join(' ')).split(' ').filter(Boolean);
+  const words = norm([...reading.names, ...(reading.ingredients ?? []), reading.text].join(' ')).split(' ').filter(Boolean);
   return target.some((t) => words.some((w) => w === t || (t.length >= 6 && w.length >= 5 && lev(w, t) <= 1)));
 }
 
@@ -59,9 +63,16 @@ export function strengthOf(text: string): { value: number; unit: string } | null
 }
 
 export type BoxVerdict =
-  | { kind: 'match'; plan: MedPlan; strength: 'same' | 'different' | 'unknown'; boxStrength: string }
+  | { kind: 'match'; plan: MedPlan; strength: 'same' | 'different' | 'unknown'; boxStrength: string; /** other active ingredients on the box than the prescribed medicine */ extra: string[] }
   | { kind: 'not_prescribed'; read: string }
   | { kind: 'unreadable' };
+
+/** the same amount in one unit (g and mcg become mg), so "0.5 g" and "500 mg" count as the same strength */
+function inMg(x: { value: number; unit: string }): { value: number; unit: string } {
+  if (x.unit === 'g') return { value: x.value * 1000, unit: 'mg' };
+  if (x.unit === 'mcg') return { value: x.value / 1000, unit: 'mg' };
+  return x;
+}
 
 /** Compares what was read with the patient's prescriptions (active ones first). */
 export function checkBox(reading: BoxReading | null, plans: MedPlan[]): BoxVerdict {
@@ -71,8 +82,12 @@ export function checkBox(reading: BoxReading | null, plans: MedPlan[]): BoxVerdi
   if (!plan) return { kind: 'not_prescribed', read: reading.names[0] || reading.text.slice(0, 60) };
   const boxS = strengthOf(`${reading.strength} ${reading.text}`);
   const rxS = strengthOf(plan.dose);
-  const strength = !boxS || !rxS || boxS.unit !== rxS.unit ? 'unknown' : boxS.value === rxS.value ? 'same' : 'different';
-  return { kind: 'match', plan, strength, boxStrength: boxS ? `${boxS.value} ${boxS.unit}` : '' };
+  const a = boxS && inMg(boxS), b = rxS && inMg(rxS);
+  const strength = !a || !b || a.unit !== b.unit ? 'unknown' : Math.abs(a.value - b.value) < 1e-9 ? 'same' : 'different';
+  // a combination product (e.g. amoxicillin + clavulanic acid) is not the same as the single medicine prescribed
+  const one = (x: string) => namesMedicine({ readable: true, names: [x], ingredients: [], strength: '', form: '', text: '' }, plan.name);
+  const extra = (reading.ingredients ?? []).filter((x) => !one(x) && !norm(plan.name).split(' ').some((w) => w.length >= 4 && norm(x).includes(w)));
+  return { kind: 'match', plan, strength, boxStrength: boxS ? `${boxS.value} ${boxS.unit}` : '', extra };
 }
 
 /** A smaller JPEG for sending (long side ≤ 1280 px). */
