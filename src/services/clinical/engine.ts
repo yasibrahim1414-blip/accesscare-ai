@@ -92,7 +92,7 @@ Reply with only this JSON:
 {"considerations":[{"title":"possible explanation or clinical concern to evaluate","supporting":["F1"],"against":["F3"],"missing":["what information would change this"],"uncertainty":"one sentence on what is uncertain","refs":["nhs_headache"]}],
  "next_steps":[{"kind":"question|examination|investigation|referral|other","text":"what the doctor may consider doing","why":"why, from the facts","supporting":["F2"],"refs":[]}],
  "extra_warnings":[{"title":"an urgent concern the rules missed","why":"why","evidence":["F1"]}]}
-Rules: use ONLY the facts above — never add symptoms, history, test results, medicines or allergies. Every item must cite fact ids in "supporting"/"evidence". Facts marked "unsure" or "interpretation" are uncertain; "denied" means the patient said no. Do not give probabilities, percentages or certainty. Do not name medicines or doses (a separate, doctor-requested step handles medicines). Do not repeat the rule warnings. At most 4 considerations and 5 next steps; short plain sentences. If the facts are too limited, return few items and say what is missing.`;
+Rules: use ONLY the facts above — never add symptoms, history, test results, medicines or allergies. Every item must cite fact ids in "supporting"/"evidence". Facts marked "unsure" or "interpretation" are uncertain; "denied" means the patient said no. Do not give probabilities, percentages or certainty. Do not name medicines or doses (a separate, doctor-requested step handles medicines). Do not repeat the rule warnings. At most 4 considerations and 5 next steps; short plain sentences (each text under 25 words, at most 3 \"missing\" items per consideration). If the facts are too limited, return few items and say what is missing.`;
 }
 
 /** Validates AI output against the case. Returns the merged analysis. */
@@ -141,9 +141,9 @@ export async function analyze(input: EngineInput, ai: ClinicalAI | null): Promis
   const consent = reportOf(input.consultation).aiConsent === true;
   if (!consent) return { ...base, ai: { status: 'not_consented' } };
   if (!ai) return { ...base, ai: { status: 'unavailable', error: 'No AI service in this view.' } };
-  const r = await ai(analysisPrompt(base), 1500).catch((e) => ({ error: (e as Error).message || 'failed' }));
+  const r = await ai(analysisPrompt(base), 3000).catch((e) => ({ error: (e as Error).message || 'failed' }));
   if ('error' in r) return { ...base, ai: { status: 'failed', error: r.error, at: now() } };
-  if (!r.json || typeof r.json !== 'object') return { ...base, ai: { status: 'failed', error: 'The AI answer was not valid JSON; nothing from it was used.', at: now() } };
+  if (!r.json || typeof r.json !== 'object') return { ...base, ai: { status: 'failed', error: 'The AI answer was incomplete or not in the expected format, so nothing from it was used. Try again; on the website, updating the AccessCare worker to version 10 keeps the complete parts of a long answer.', at: now() } };
   return applyAI(base, r.json);
 }
 
@@ -182,10 +182,10 @@ export async function suggestMeds(a: ClinicalAnalysis, d: Documented, consent: b
   const gate = medsGate(a, d, consent);
   if (gate.length) return { ...base, status: 'withheld', reasons: gate };
   if (!ai) return { ...base, status: 'unavailable', reasons: ['No AI service is available in this view.'] };
-  const r = await ai(medsPrompt(a, d), 900).catch((e) => ({ error: (e as Error).message || 'failed' }));
+  const r = await ai(medsPrompt(a, d), 1400).catch((e) => ({ error: (e as Error).message || 'failed' }));
   if ('error' in r) return { ...base, status: 'failed', reasons: [`AI request failed: ${r.error}`] };
   const j = (r.json && typeof r.json === 'object' ? r.json : null) as { withhold?: unknown; reason?: unknown; options?: unknown } | null;
-  if (!j) return { ...base, status: 'failed', reasons: ['The AI answer was not valid JSON; nothing from it was used.'] };
+  if (!j) return { ...base, status: 'failed', reasons: ['The AI answer was incomplete or not in the expected format, so nothing from it was used. Try again.'] };
   if (j.withhold === true) return { ...base, status: 'withheld', reasons: [`AI: ${str(j.reason, 300) || 'the facts do not support a medication option yet.'}`] };
   const ids = new Set(a.facts.map((f) => f.id));
   const cand = (Array.isArray(j.options) ? j.options : []).slice(0, 3).map((x) => (x ?? {}) as Record<string, unknown>)

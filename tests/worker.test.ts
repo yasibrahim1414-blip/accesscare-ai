@@ -50,7 +50,7 @@ test('worker: conversation prompts, answer size, natural voice route and status 
     assert.equal(JSON.parse(sent[1].body).max_tokens, 1200, 'answer size is capped');
     // status: tells which services exist, never the keys
     r = await worker.fetch(new Request('https://w/status', { headers: { origin: 'https://app.example' } }), full);
-    const st = await r.json(); assert.deepEqual(st, { version: 9, db: false, ai: true, model: 'claude-haiku-5-5', tts: true, ttsProvider: 'Azure AI Speech', ttsLangs: ['ar', 'en', 'fr', 'ur', 'hi'], stt: false, sttProvider: null });
+    const st = await r.json(); assert.deepEqual(st, { version: 10, db: false, ai: true, model: 'claude-haiku-5-5', tts: true, ttsProvider: 'Azure AI Speech', ttsLangs: ['ar', 'en', 'fr', 'ur', 'hi'], stt: false, sttProvider: null });
     assert.doesNotMatch(JSON.stringify(st), /secret/);
     assert.equal((await (await worker.fetch(new Request('https://w/status', { headers: { origin: 'https://app.example' } }), env)).json()).tts, false);
     // tts
@@ -143,4 +143,27 @@ test('worker v9: Whisper speech-to-text and Workers AI voices through the AI bin
   r = await worker.fetch(post('/tts', { text: 'नमस्ते', lang: 'hi' }), e);
   assert.equal(r.status, 502, 'provider failed → the app falls back to the device voice');
   r = await worker.fetch(post('/tts', { text: 'سلام', lang: 'ur' }), e); assert.equal(r.status, 501);
+});
+
+test('AI answers: fenced, wrapped or cut-off JSON is read safely (complete items kept, the unfinished one dropped)', async () => {
+  // @ts-ignore plain JS module
+  const w = await import('../server/cloudflare-worker.mjs');
+  const { extractJson: app } = await import('../src/services/ai/json');
+  const full = { considerations: [{ title: 'Migraine to evaluate', supporting: ['F1'] }, { title: 'Tension-type headache', supporting: ['F2'] }], next_steps: [{ text: 'Ask about aura', supporting: ['F1'] }] };
+  const cut = JSON.stringify(full).slice(0, JSON.stringify(full).indexOf('Tension') + 8); // stops inside the 2nd item
+  for (const fn of [w.extractJson, app]) {
+    assert.deepEqual(fn('```json\n' + JSON.stringify(full) + '\n```'), full);
+    assert.deepEqual(fn('Here is the JSON: ' + JSON.stringify(full) + ' Hope this helps {not json}'), full);
+    assert.deepEqual(fn(cut), { considerations: [{ title: 'Migraine to evaluate', supporting: ['F1'] }] }, 'cut off: only the complete item is kept');
+    assert.equal(fn('I cannot help with that.'), null);
+    assert.equal(fn(''), null);
+    assert.deepEqual(fn('{"a":"he said \\"no, not}\\" ok","b":[1,2'), { a: 'he said "no, not}" ok', b: [1] }, 'brackets and quotes inside strings do not confuse it');
+  }
+  // the worker says why when nothing could be read
+  const orig = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({ stop_reason: 'max_tokens', content: [{ type: 'text', text: 'Sure, here' }] }), { status: 200 })) as typeof fetch;
+  try {
+    const r = await w.default.fetch(new Request('https://w/ai', { method: 'POST', headers: { origin: 'https://app.example', 'content-type': 'application/json' }, body: JSON.stringify({ prompt: 'You support a licensed doctor reviewing a patient-approved symptom report. x', max_tokens: 9000 }) }), env);
+    const b = await r.json(); assert.equal(b.json, null); assert.equal(b.stop, 'max_tokens');
+  } finally { globalThis.fetch = orig; }
 });

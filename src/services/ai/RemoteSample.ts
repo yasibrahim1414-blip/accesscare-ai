@@ -1,6 +1,7 @@
 // Claude for the web version: AccessCare's fixed prompts go to a small proxy
 // (server/cloudflare-worker.mjs) that holds the API key. The page never sees a key.
 import type { SampleFn } from './AIAssist';
+import { extractJson } from './json';
 
 /** Result of the last call to the proxy, shown to the patient so a broken setup is visible. */
 export const remoteStatus: { ok: boolean | null; error: string } = { ok: null, error: '' };
@@ -19,8 +20,13 @@ export function remoteSample(endpoint: string): SampleFn {
       // a refused proxy call is a setup problem, not the patient declining AI
       throw Object.assign(new Error(`AI service ${r.status}`), { code: 'unavailable', detail: remoteStatus.error });
     }
-    const data = (await r.json()) as { json?: unknown };
+    const data = (await r.json()) as { json?: unknown; stop?: string | null; text?: string };
     remoteStatus.ok = true; remoteStatus.error = '';
+    if (data.json === null || data.json === undefined) {
+      const again = data.text ? extractJson(data.text) : null;
+      if (again !== null) return again;
+      if (data.stop === 'max_tokens') throw Object.assign(new Error('The AI answer was too long and was cut off before it was complete.'), { code: 'cut_off' });
+    }
     return data.json ?? null;
   };
   const fn = (async (input: string, opts?: Record<string, unknown>) => ({ text: JSON.stringify(await call(input, opts)) })) as SampleFn;
