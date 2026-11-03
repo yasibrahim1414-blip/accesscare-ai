@@ -51,7 +51,7 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_IMAGE_B64 = 1_600_000; // about 1.2 MB of image
 const CLINICAL = 'You support a licensed doctor reviewing a patient-approved symptom report.';
 const MAX_PROMPT = 12000;
-const VERSION = 9; // the app checks this to tell you when the worker code is out of date
+const VERSION = 10; // the app checks this to tell you when the worker code is out of date
 const MAX_TTS = 1500;
 const MAX_AUDIO_B64 = 2_000_000; // about 1.5 MB of recorded speech (a short answer)
 const LANGS = ['ar', 'en', 'fr', 'ur', 'hi'];
@@ -71,12 +71,29 @@ function cors(origin, allowed) {
 }
 const json = (body, status, headers) => new Response(JSON.stringify(body), { status, headers: { ...headers, 'content-type': 'application/json' } });
 
-/** First JSON object or array in the model's text. */
+/** First JSON object or array in the model's text. A cut-off answer keeps its complete items (src/services/ai/json.ts has the same function). */
 export function extractJson(text) {
-  const t = String(text ?? '').trim();
-  try { return JSON.parse(t); } catch { /* fall through */ }
-  const m = t.match(/[[{][\s\S]*[\]}]/);
-  if (m) { try { return JSON.parse(m[0]); } catch { /* */ } }
+  const t = String(text ?? '').replace(/```(?:json)?/gi, '').trim();
+  try { return JSON.parse(t); } catch { /* look inside */ }
+  const start = t.search(/[[{]/);
+  if (start < 0) return null;
+  const s = t.slice(start);
+  const stack = []; const cuts = [];
+  let inStr = false, esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') inStr = true;
+    else if (ch === '{' || ch === '[') stack.push(ch === '{' ? '}' : ']');
+    else if (ch === '}' || ch === ']') {
+      stack.pop();
+      if (!stack.length) { try { return JSON.parse(s.slice(0, i + 1)); } catch { return null; } }
+      cuts.push({ at: i + 1, closers: [...stack].reverse().join('') });
+    } else if (ch === ',') cuts.push({ at: i, closers: [...stack].reverse().join('') });
+  }
+  for (let k = cuts.length - 1; k >= 0 && k >= cuts.length - 60; k--) {
+    try { return JSON.parse(s.slice(0, cuts[k].at) + cuts[k].closers); } catch { /* earlier */ }
+  }
   return null;
 }
 
@@ -314,7 +331,7 @@ export default {
       if (!IMAGE_TYPES.includes(t) || !/^[A-Za-z0-9+/=]+$/.test(d) || d.length > MAX_IMAGE_B64) return json({ error: 'bad_image' }, 400, c.headers);
       image = { type: 'image', source: { type: 'base64', media_type: t, data: d } };
     }
-    const maxTokens = Math.min(prompt.startsWith(CLINICAL) ? 1600 : 1200, Math.max(100, Number(body?.max_tokens) || 400));
+    const maxTokens = Math.min(prompt.startsWith(CLINICAL) ? 3200 : 1200, Math.max(100, Number(body?.max_tokens) || 400));
     // try the configured model first, then the others, so an unavailable model name never breaks the app
     const models = [...new Set([env.MODEL, ...MODELS].filter(Boolean))];
     let r = null; let detail = '';
@@ -339,6 +356,8 @@ export default {
     if (!r.ok) return json({ error: 'upstream', status: r.status, detail, colo: request.cf?.colo ?? null }, 502, c.headers);
     const data = await r.json();
     const text = (data?.content ?? []).filter((x) => x.type === 'text').map((x) => x.text).join('');
-    return json({ json: extractJson(text) }, 200, c.headers);
+    const parsed = extractJson(text);
+    // when no JSON could be read, say why (cut off at the length limit, or plain text) so the app can show it
+    return json(parsed === null ? { json: null, stop: data?.stop_reason ?? null, text: text.slice(0, 300) } : { json: parsed, ...(data?.stop_reason === 'max_tokens' ? { stop: 'max_tokens' } : {}) }, 200, c.headers);
   },
 };
