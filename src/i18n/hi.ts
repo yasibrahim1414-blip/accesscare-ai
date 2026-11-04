@@ -1960,4 +1960,6 @@ export const HI: Record<string, string> = {
   'Install AccessCare on this device': 'एक्सेसकेयर इस डिवाइस पर इंस्टॉल करें',
   'To install on iPhone or iPad: open this page in Safari, tap Share, then “Add to Home Screen”.': 'आईफ़ोन या आईपैड पर इंस्टॉल करने के लिए: यह पेज Safari में खोलें, शेयर दबाएं, फिर “होम स्क्रीन में जोड़ें”।',
   'To install: open your browser’s menu and choose “Install app” or “Add to Home screen”.': 'इंस्टॉल करने के लिए: ब्राउज़र का मेनू खोलें और “ऐप इंस्टॉल करें” या “होम स्क्रीन में जोड़ें” चुनें।',
+  'You are using the AccessCare Android app.': 'आप एक्सेसकेयर का एंड्रॉइड ऐप इस्तेमाल कर रहे हैं।',
+  'Download the AccessCare Android app (opens without the browser)': 'एक्सेसकेयर का एंड्रॉइड ऐप डाउनलोड करें (ब्राउज़र के बिना खुलता है)',
 };

@@ -1960,4 +1960,6 @@ export const UR: Record<string, string> = {
   'Install AccessCare on this device': 'ایکسس کیئر اس آلے پر انسٹال کریں',
   'To install on iPhone or iPad: open this page in Safari, tap Share, then “Add to Home Screen”.': 'آئی فون یا آئی پیڈ پر انسٹال کرنے کے لیے: یہ صفحہ Safari میں کھولیں، شیئر دبائیں، پھر “ہوم اسکرین میں شامل کریں”۔',
   'To install: open your browser’s menu and choose “Install app” or “Add to Home screen”.': 'انسٹال کرنے کے لیے: براؤزر کا مینو کھولیں اور “ایپ انسٹال کریں” یا “ہوم اسکرین میں شامل کریں” چنیں۔',
+  'You are using the AccessCare Android app.': 'آپ ایکسس کیئر کی اینڈرائیڈ ایپ استعمال کر رہے ہیں۔',
+  'Download the AccessCare Android app (opens without the browser)': 'ایکسس کیئر کی اینڈرائیڈ ایپ ڈاؤن لوڈ کریں (براؤزر کے بغیر کھلتی ہے)',
 };

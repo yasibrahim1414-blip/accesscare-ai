@@ -1960,4 +1960,6 @@ export const FR: Record<string, string> = {
   'Install AccessCare on this device': 'Installer AccessCare sur cet appareil',
   'To install on iPhone or iPad: open this page in Safari, tap Share, then “Add to Home Screen”.': 'Pour l’installer sur iPhone ou iPad : ouvrez cette page dans Safari, touchez Partager, puis « Sur l’écran d’accueil ».',
   'To install: open your browser’s menu and choose “Install app” or “Add to Home screen”.': 'Pour l’installer : ouvrez le menu du navigateur et choisissez « Installer l’application » ou « Ajouter à l’écran d’accueil ».',
+  'You are using the AccessCare Android app.': 'Vous utilisez l’application Android AccessCare.',
+  'Download the AccessCare Android app (opens without the browser)': 'Télécharger l’application Android AccessCare (s’ouvre sans le navigateur)',
 };
