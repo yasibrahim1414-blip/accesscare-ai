@@ -1953,4 +1953,11 @@ export const HI: Record<string, string> = {
   'could not connect': 'जुड़ नहीं सका',
   '{0} s': '{0} सेकंड',
   '{0} min': '{0} मिनट',
+  'This device': 'यह डिवाइस',
+  'Use AccessCare as an app': 'एक्सेसकेयर को ऐप की तरह इस्तेमाल करें',
+  'Installed, it opens from an icon on your home screen, in its own window, even without a connection (sending, messages and AI still need the internet).': 'इंस्टॉल होने के बाद यह होम स्क्रीन के आइकन से अपनी विंडो में खुलता है, इंटरनेट के बिना भी (भेजने, संदेश और AI के लिए अब भी इंटरनेट चाहिए)।',
+  'AccessCare is installed on this device. Open it from its icon on your home screen.': 'एक्सेसकेयर इस डिवाइस पर इंस्टॉल है। इसे होम स्क्रीन के आइकन से खोलें।',
+  'Install AccessCare on this device': 'एक्सेसकेयर इस डिवाइस पर इंस्टॉल करें',
+  'To install on iPhone or iPad: open this page in Safari, tap Share, then “Add to Home Screen”.': 'आईफ़ोन या आईपैड पर इंस्टॉल करने के लिए: यह पेज Safari में खोलें, शेयर दबाएं, फिर “होम स्क्रीन में जोड़ें”।',
+  'To install: open your browser’s menu and choose “Install app” or “Add to Home screen”.': 'इंस्टॉल करने के लिए: ब्राउज़र का मेनू खोलें और “ऐप इंस्टॉल करें” या “होम स्क्रीन में जोड़ें” चुनें।',
 };

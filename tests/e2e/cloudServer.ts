@@ -248,7 +248,7 @@ ${shim(url.searchParams.get('uid') ?? 'anon', url.searchParams.get('name') ?? ''
   if (url.pathname.startsWith('/web/')) { // the static web build, like GitHub Pages
     const f = url.pathname.slice(5) || 'index.html';
     const safe = f.replace(/\.\./g, '');
-    const type = safe.endsWith('.html') || safe === '' ? 'text/html' : safe.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream';
+    const type = safe.endsWith('.html') || safe === '' ? 'text/html' : safe.endsWith('.wasm') ? 'application/wasm' : safe.endsWith('.js') ? 'text/javascript' : safe.endsWith('.webmanifest') ? 'application/manifest+json' : safe.endsWith('.png') ? 'image/png' : 'application/octet-stream';
     try { res.writeHead(200, { 'content-type': type }); res.end(readFileSync(`dist/web/${safe || 'index.html'}`)); } catch { res.writeHead(404); res.end(); }
     return;
   }

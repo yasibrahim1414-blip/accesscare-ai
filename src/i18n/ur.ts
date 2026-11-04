@@ -1953,4 +1953,11 @@ export const UR: Record<string, string> = {
   'could not connect': 'رابطہ نہیں ہو سکا',
   '{0} s': '{0} سیکنڈ',
   '{0} min': '{0} منٹ',
+  'This device': 'یہ آلہ',
+  'Use AccessCare as an app': 'ایکسس کیئر کو ایپ کی طرح استعمال کریں',
+  'Installed, it opens from an icon on your home screen, in its own window, even without a connection (sending, messages and AI still need the internet).': 'انسٹال ہونے کے بعد یہ ہوم اسکرین کے آئیکن سے اپنی ونڈو میں کھلتی ہے، انٹرنیٹ کے بغیر بھی (بھیجنے، پیغامات اور AI کے لیے اب بھی انٹرنیٹ چاہیے)۔',
+  'AccessCare is installed on this device. Open it from its icon on your home screen.': 'ایکسس کیئر اس آلے پر انسٹال ہے۔ اسے ہوم اسکرین کے آئیکن سے کھولیں۔',
+  'Install AccessCare on this device': 'ایکسس کیئر اس آلے پر انسٹال کریں',
+  'To install on iPhone or iPad: open this page in Safari, tap Share, then “Add to Home Screen”.': 'آئی فون یا آئی پیڈ پر انسٹال کرنے کے لیے: یہ صفحہ Safari میں کھولیں، شیئر دبائیں، پھر “ہوم اسکرین میں شامل کریں”۔',
+  'To install: open your browser’s menu and choose “Install app” or “Add to Home screen”.': 'انسٹال کرنے کے لیے: براؤزر کا مینو کھولیں اور “ایپ انسٹال کریں” یا “ہوم اسکرین میں شامل کریں” چنیں۔',
 };

@@ -51,7 +51,7 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_IMAGE_B64 = 1_600_000; // about 1.2 MB of image
 const CLINICAL = 'You support a licensed doctor reviewing a patient-approved symptom report.';
 const MAX_PROMPT = 12000;
-const VERSION = 10; // the app checks this to tell you when the worker code is out of date
+const VERSION = 11; // the app checks this to tell you when the worker code is out of date
 const MAX_TTS = 1500;
 const MAX_AUDIO_B64 = 2_000_000; // about 1.5 MB of recorded speech (a short answer)
 const LANGS = ['ar', 'en', 'fr', 'ur', 'hi'];
@@ -65,8 +65,10 @@ export function apiKey(env) {
   return String(raw).trim().replace(/^["']|["']$/g, '').replace(/\s+/g, '');
 }
 
+// the app running from a local web server on the person's own computer (the downloaded files)
+const LOCAL = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/;
 function cors(origin, allowed) {
-  const ok = allowed.includes('*') || allowed.includes(origin);
+  const ok = allowed.includes('*') || allowed.includes(origin) || LOCAL.test(origin);
   return { ok, headers: { 'Access-Control-Allow-Origin': ok ? origin || '*' : 'null', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, x-ac-auth', 'Vary': 'Origin' } };
 }
 const json = (body, status, headers) => new Response(JSON.stringify(body), { status, headers: { ...headers, 'content-type': 'application/json' } });

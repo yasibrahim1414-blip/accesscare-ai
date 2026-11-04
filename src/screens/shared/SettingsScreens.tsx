@@ -4,6 +4,7 @@ import { LuLogOut, LuTrash2, LuRepeat, LuAccessibility, LuUnlink, LuChevronRight
 import { useApp } from '../../app/AppContext';
 import { Banner, ConfirmSheet, Field, Toggle, TopBar } from '../../ui/components';
 import { forgetAccount, useLogout } from '../auth/AuthScreens';
+import { InstallApp } from '../../ui/InstallApp';
 
 export function SettingsScreen() {
   const { me, backend, nav, setMe, toast, force2D, setForce2D, refresh } = useApp();
@@ -29,6 +30,9 @@ export function SettingsScreen() {
           {isPatient && <button className="list-item" onClick={() => setSheet('disconnect')}><span className="li-ico"><LuUnlink /></span><div className="grow"><b>Disconnect Doctor</b></div></button>}
           <button className="list-item danger" onClick={() => { setPw(''); setErr(null); setSheet('delete'); }}><span className="li-ico"><LuTrash2 /></span><div className="grow"><b>Delete account</b></div></button>
         </div>
+
+        <h3 className="section">This device</h3>
+        <div className="card" data-testid="install-card"><b>Use AccessCare as an app</b><p className="small muted" style={{ margin: 0 }}>Installed, it opens from an icon on your home screen, in its own window, even without a connection (sending, messages and AI still need the internet).</p><InstallApp /></div>
 
         <h3 className="section">Accessibility</h3>
         <div className="list">

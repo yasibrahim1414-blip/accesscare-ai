@@ -1953,4 +1953,11 @@ export const FR: Record<string, string> = {
   'could not connect': 'connexion impossible',
   '{0} s': '{0} s',
   '{0} min': '{0} min',
+  'This device': 'Cet appareil',
+  'Use AccessCare as an app': 'Utiliser AccessCare comme une application',
+  'Installed, it opens from an icon on your home screen, in its own window, even without a connection (sending, messages and AI still need the internet).': 'Une fois installée, elle s’ouvre depuis une icône sur l’écran d’accueil, dans sa propre fenêtre, même sans connexion (l’envoi, les messages et l’IA demandent toujours Internet).',
+  'AccessCare is installed on this device. Open it from its icon on your home screen.': 'AccessCare est installée sur cet appareil. Ouvrez-la depuis son icône sur l’écran d’accueil.',
+  'Install AccessCare on this device': 'Installer AccessCare sur cet appareil',
+  'To install on iPhone or iPad: open this page in Safari, tap Share, then “Add to Home Screen”.': 'Pour l’installer sur iPhone ou iPad : ouvrez cette page dans Safari, touchez Partager, puis « Sur l’écran d’accueil ».',
+  'To install: open your browser’s menu and choose “Install app” or “Add to Home screen”.': 'Pour l’installer : ouvrez le menu du navigateur et choisissez « Installer l’application » ou « Ajouter à l’écran d’accueil ».',
 };

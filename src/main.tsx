@@ -77,7 +77,16 @@ async function pickBackend(): Promise<{ backend: Backend; note?: string }> {
   return { backend: new LocalDemoBackend(createDefaultStore()) };
 }
 
+/** The installed app (website build): keeps the app's files on the device. Not inside Claude, not from a local file. */
+function registerOffline() {
+  const local = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (!('serviceWorker' in navigator) || !document.querySelector('link[rel=manifest]') || !(location.protocol === 'https:' || local)) return;
+  const go = () => { navigator.serviceWorker.register('sw.js').catch(() => { /* the site still works without it */ }); };
+  if (document.readyState === 'complete') go(); else window.addEventListener('load', go);
+}
+
 async function boot() {
+  registerOffline();
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);

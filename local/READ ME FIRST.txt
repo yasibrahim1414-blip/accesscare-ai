@@ -1,0 +1,35 @@
+AccessCare AI — your own copy of the app
+=========================================
+
+What is in this folder
+  app/                                 the whole app (the same files as the website)
+  Start AccessCare (Windows).bat       double-click on Windows
+  Start AccessCare (Mac or Linux).command   double-click on a Mac (or run it on Linux)
+
+How to start it on a computer
+  1. Unzip the folder (do not run it from inside the zip).
+  2. Double-click the Start file for your computer. A small window opens and your browser opens
+     http://localhost:8000. Keep the small window open while you use the app; close it to stop.
+  On a Mac, the first time: right-click the Start file → Open → Open (macOS asks once because
+  the file came from the internet).
+  3. Use Chrome or Edge for everything (camera, microphone, voice, 3D body).
+  Tip: in Chrome or Edge you can then press "Install" in the address bar to get an app icon.
+
+Why not just double-click index.html?
+  Browsers block the camera, the 3D model, hand tracking and the AI for pages opened directly
+  as a file. Running it through the Start file (a tiny server on your own computer only) fixes that.
+
+What needs the internet
+  The app itself opens without the internet. Accounts shared between devices, messages, calls,
+  the AI and the natural voices use the AccessCare server, so they need the internet. The AI works
+  from this copy only with the AccessCare worker version 11 or newer (it accepts localhost).
+
+On a phone
+  Phones cannot run these files. On a phone, open the website once and install it:
+  - Android (Chrome): menu ⋮ → "Install app" (or the "Install AccessCare" button in the app).
+  - iPhone / iPad (Safari): Share → "Add to Home Screen".
+  After that it opens from its icon, in its own window, like any app.
+
+Privacy
+  The app stores no health data in these files. Medical records are encrypted on the device.
+  This copy talks only to the AccessCare server configured in it.

@@ -9,6 +9,7 @@
 // Never put a service-role key here: everything in the bundle is public.
 import { build } from 'esbuild';
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 const supaUrl = process.env.ACCESSCARE_SUPABASE_URL ?? '';
 const supaKey = process.env.ACCESSCARE_SUPABASE_ANON_KEY ?? '';
@@ -42,10 +43,35 @@ writeFileSync('dist/accesscare-ai.html', `${head}
 `);
 
 const jsWeb = await bundle({ __SUPABASE_URL__: JSON.stringify(supaUrl), __SUPABASE_ANON_KEY__: JSON.stringify(supaKey), __AI_ENDPOINT__: JSON.stringify(aiEndpoint) });
-writeFileSync('dist/web/index.html', `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">${head}</head>
-<body><div id="root"></div><script>${jsWeb}</script></body></html>`);
+// installable app (PWA): manifest, icons and a service worker that keeps the app's own files on the device
+const pwaHead = `
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0E7C7B">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="AccessCare">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">`;
+const webPage = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">${head}${pwaHead}</head>
+<body><div id="root"></div><script>${jsWeb}</script></body></html>`;
+writeFileSync('dist/web/index.html', webPage);
 copyFileSync('public/body.glb', 'dist/web/body.glb');
+mkdirSync('dist/web/icons', { recursive: true });
+for (const f of ['icon-192.png', 'icon-512.png', 'maskable-512.png', 'apple-touch-icon.png']) copyFileSync(`public/icons/${f}`, `dist/web/icons/${f}`);
+writeFileSync('dist/web/manifest.webmanifest', JSON.stringify({
+  name: 'AccessCare AI', short_name: 'AccessCare', description: 'Tell your doctor what you feel — by voice, touch or sign, in five languages.',
+  start_url: './', scope: './', display: 'standalone', orientation: 'any', background_color: '#FFFFFF', theme_color: '#0E7C7B',
+  icons: [
+    { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+    { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    { src: 'icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+  ],
+}, null, 2));
+// a new build gets a new cache, so an installed app picks up updates
+const buildId = createHash('sha256').update(webPage).digest('hex').slice(0, 12);
+writeFileSync('dist/web/sw.js', readFileSync('public/sw.js', 'utf8').replace('__BUILD__', buildId));
 
 // hand tracking (MediaPipe Hand Landmarker, Apache-2.0) — see vendor/mediapipe/NOTICE.md
 // hand tracking for sign recognition (MediaPipe Hand Landmarker) — web builds only: pages inside Claude can't use the camera

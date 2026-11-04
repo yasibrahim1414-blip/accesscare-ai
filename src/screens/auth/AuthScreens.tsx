@@ -1,3 +1,4 @@
+import { InstallApp } from '../../ui/InstallApp';
 import React, { useEffect, useState } from 'react';
 import { LuHeartPulse, LuPersonStanding, LuSparkles, LuShieldCheck, LuStethoscope, LuUserRound, LuCloud, LuLock, LuLogOut, LuHeartHandshake } from 'react-icons/lu';
 import { homeFor, useApp, useLoad } from '../../app/AppContext';
@@ -102,6 +103,7 @@ export function WelcomeScreen() {
             <Button variant="secondary" big block onClick={() => nav.push({ name: 'signin' })}>Log in</Button>
           </div>
           <p className="tiny muted" style={{ textAlign: 'center' }}>AccessCare AI helps you communicate. It does not diagnose. In an emergency, call your local emergency number.</p>
+          <div style={{ textAlign: 'center' }}><InstallApp compact /></div>
           {local && (
             <div className="card tinted">
               <b>Offline demo</b>

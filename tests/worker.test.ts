@@ -50,7 +50,7 @@ test('worker: conversation prompts, answer size, natural voice route and status 
     assert.equal(JSON.parse(sent[1].body).max_tokens, 1200, 'answer size is capped');
     // status: tells which services exist, never the keys
     r = await worker.fetch(new Request('https://w/status', { headers: { origin: 'https://app.example' } }), full);
-    const st = await r.json(); assert.deepEqual(st, { version: 10, db: false, ai: true, model: 'claude-haiku-5-5', tts: true, ttsProvider: 'Azure AI Speech', ttsLangs: ['ar', 'en', 'fr', 'ur', 'hi'], stt: false, sttProvider: null });
+    const st = await r.json(); assert.deepEqual(st, { version: 11, db: false, ai: true, model: 'claude-haiku-5-5', tts: true, ttsProvider: 'Azure AI Speech', ttsLangs: ['ar', 'en', 'fr', 'ur', 'hi'], stt: false, sttProvider: null });
     assert.doesNotMatch(JSON.stringify(st), /secret/);
     assert.equal((await (await worker.fetch(new Request('https://w/status', { headers: { origin: 'https://app.example' } }), env)).json()).tts, false);
     // tts
@@ -166,4 +166,13 @@ test('AI answers: fenced, wrapped or cut-off JSON is read safely (complete items
     const r = await w.default.fetch(new Request('https://w/ai', { method: 'POST', headers: { origin: 'https://app.example', 'content-type': 'application/json' }, body: JSON.stringify({ prompt: 'You support a licensed doctor reviewing a patient-approved symptom report. x', max_tokens: 9000 }) }), env);
     const b = await r.json(); assert.equal(b.json, null); assert.equal(b.stop, 'max_tokens');
   } finally { globalThis.fetch = orig; }
+});
+
+test('worker v11: the downloaded app on the person’s own computer (localhost) is allowed; other sites are not', async () => {
+  const st = (origin: string) => worker.fetch(new Request('https://w/status', { headers: { origin } }), env).then((r: Response) => r.status);
+  assert.equal(await st('http://localhost:8000'), 200);
+  assert.equal(await st('http://127.0.0.1:5500'), 200);
+  assert.equal(await st('http://localhost.evil.example'), 403);
+  assert.equal(await st('https://evil.example'), 403);
+  assert.equal(await st('null'), 403, 'a page opened as a file (or a sandboxed frame) is not allowed by default');
 });
