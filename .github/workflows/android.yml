@@ -62,8 +62,10 @@ jobs:
           export VERSION_CODE=${{ github.run_number }}
           # on failure, the important lines of the log are shown as annotations on the commit
           if ! gradle --no-daemon assembleRelease > ../build.log 2>&1; then
-            grep -E "error|Error|FAILURE|What went wrong|wrong:|\.java:|AAPT|> " ../build.log | grep -v "^> Task" | head -40 | while IFS= read -r l; do echo "::error::$l"; done
-            tail -25 ../build.log | while IFS= read -r l; do echo "::warning::$l"; done
+            # (annotations are limited in number, so the log goes in a few long ones)
+            for part in "$(grep -n -A30 'What went wrong' ../build.log | head -60)" "$(grep -E '\.java:[0-9]+|error:|AAPT|Execution failed' ../build.log | head -40)" "$(tail -40 ../build.log)"; do
+              printf '::error::%s\n' "$(printf '%s' "$part" | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')"
+            done
             exit 1
           fi
           cp app/build/outputs/apk/release/app-release.apk ../AccessCare.apk
