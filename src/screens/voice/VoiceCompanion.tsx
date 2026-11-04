@@ -607,7 +607,7 @@ export function VoiceCompanion({ mode = 'blind' }: { mode?: 'blind' | 'talk' } =
             <b>{L(lang, 'About this assistant', 'عن المساعد')}</b>
             <span className="muted">{ctx.aiOn ? L(lang, 'Claude AI helps understand your words and talks with you; AccessCare keeps the record, checks every answer, and reads the summary back for your approval.', 'ذكاء Claude بيساعد يفهم كلامك ويتكلم معاك؛ وأكسس كير بيحفظ اللي قلته ويراجع كل إجابة ويقرالك الملخص علشان توافق عليه.')
               : L(lang, 'I ask guided questions that follow what you tell me, and understand set words in English and Arabic.', 'بسأل أسئلة على حسب اللي بتقوله، وبفهم كلمات محددة بالعربي والإنجليزي.')}
-              {' '}{backend.shared ? L(lang, 'Your account and reports are saved in the shared database.', 'حسابك وتقاريرك محفوظين في قاعدة البيانات المشتركة.') : L(lang, 'Offline demo: saved on this device only.', 'نسخة تجريبية: محفوظ على الجهاز ده بس.')}
+              {' '}{backend.shared ? L(lang, 'Your account and reports are saved in the shared database.', 'حسابك وتقاريرك محفوظين في قاعدة البيانات المشتركة.') : L(lang, 'Saved on this device only.', 'محفوظ على الجهاز ده بس.')}
               {' '}{L(lang, 'It does not diagnose. In an emergency call your local emergency number.', 'مش بيشخّص. في الطوارئ اتصل برقم الطوارئ.')}</span>
             <span className="tiny" data-testid="va-ai-status">{aiLine}</span>
             {ai.supported && ctx.aiOn && <Button variant="secondary" disabled={testing} onClick={() => void runTest(true)} data-testid="va-ai-test2">{testing ? 'Testing…' : 'Test AI connection'}</Button>}

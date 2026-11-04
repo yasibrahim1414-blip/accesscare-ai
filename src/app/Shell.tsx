@@ -142,12 +142,10 @@ export function BlindButton({ wide }: { wide?: boolean }) {
 
 /** Top strip on phones (and on wide screens without the side bar): storage notice, language, Blind Mode. */
 export function UtilityBar({ strip, showBlind }: { strip: { cls: string; text: string }; showBlind: boolean }) {
-  const { nav } = useApp();
   return (
     <div className="utilbar" style={{ order: -1 }}>
       <div className={`mode-strip ${strip.cls}`} role="note" data-testid="mode-strip">
         <span className="ms-text"><span className="dot" aria-hidden />{strip.text}</span>
-        <button onClick={() => nav.push({ name: 'about' })}>What’s real?</button>
       </div>
       <div className="util-actions">
         <LangSwitch />

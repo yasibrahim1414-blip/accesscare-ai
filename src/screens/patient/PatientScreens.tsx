@@ -478,7 +478,7 @@ export function PatientProfile() {
           <button className="list-item" onClick={() => nav.push({ name: 'p.prefs' })}><span className="li-ico"><LuAccessibility /></span><div className="grow"><b>Communication preferences</b></div><LuChevronRight className="chev" /></button>
           <button className="list-item" onClick={() => nav.reset({ name: 'p.history' })}><span className="li-ico"><LuClipboardList /></span><div className="grow"><b>Consultation history</b><div className="small muted">{list.data?.length ?? '…'} total</div></div><LuChevronRight className="chev" /></button>
           <button className="list-item" onClick={() => nav.push({ name: 'settings' })} data-testid="open-settings"><span className="li-ico"><LuSettings /></span><div className="grow"><b>Account settings</b></div><LuChevronRight className="chev" /></button>
-          <button className="list-item" onClick={() => nav.push({ name: 'about' })}><span className="li-ico"><LuInfo /></span><div className="grow"><b>About this prototype</b></div><LuChevronRight className="chev" /></button>
+          <button className="list-item" onClick={() => nav.push({ name: 'about' })}><span className="li-ico"><LuInfo /></span><div className="grow"><b>About AccessCare AI</b></div><LuChevronRight className="chev" /></button>
         </div>
         <LogoutRow />
       </div></div>

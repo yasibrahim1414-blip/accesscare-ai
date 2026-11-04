@@ -68,7 +68,7 @@ export function DoctorIdScreen({ justCreated }: { justCreated?: boolean }) {
             <li>They appear in your patient list{backend.shared ? ' on every device you log in from' : ''}.</li>
           </ol>
         </div>
-        {!backend.shared && <Banner kind="warn">Offline demo: patients must use this same browser to connect, because this copy isn’t connected to the shared database.</Banner>}
+        {!backend.shared && <Banner kind="warn">Saved on this device only: patients must use this same device to connect, because this copy isn’t connected to the shared database.</Banner>}
       </div></div>
       {justCreated && <div className="footer-bar"><Button big onClick={() => nav.reset({ name: 'd.overview' })}>Go to my dashboard</Button></div>}
     </>
@@ -382,7 +382,7 @@ export function DoctorProfile() {
           <button className="list-item" onClick={() => nav.reset({ name: 'd.patients' })}><span className="li-ico"><LuUsers /></span><div className="grow"><b>Connected patients</b><div className="small muted">{pats.data?.length ?? '…'}</div></div><LuChevronRight className="chev" /></button>
           <button className="list-item" onClick={() => nav.reset({ name: 'd.consults' })}><span className="li-ico"><LuInbox /></span><div className="grow"><b>Consultation history</b><div className="small muted">{list.data?.length ?? '…'} total</div></div><LuChevronRight className="chev" /></button>
           <button className="list-item" onClick={() => nav.push({ name: 'settings' })} data-testid="open-settings"><span className="li-ico"><LuSettings /></span><div className="grow"><b>Account settings</b></div><LuChevronRight className="chev" /></button>
-          <button className="list-item" onClick={() => nav.push({ name: 'about' })}><span className="li-ico"><LuInfo /></span><div className="grow"><b>About this prototype</b></div><LuChevronRight className="chev" /></button>
+          <button className="list-item" onClick={() => nav.push({ name: 'about' })}><span className="li-ico"><LuInfo /></span><div className="grow"><b>About AccessCare AI</b></div><LuChevronRight className="chev" /></button>
         </div>
         <LogoutRow />
       </div></div>

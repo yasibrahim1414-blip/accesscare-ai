@@ -143,7 +143,7 @@ export function MessagesPanel({ consultationId, canSend, disabledReason, report,
         </div>
       ) : disabledReason ? <p className="small muted">{disabledReason}</p> : null}
       <CallButtons consultationId={consultationId} otherName={otherName ?? (isDoctor ? 'the patient' : 'your doctor')} canCall={canSend} />
-      <div className="row tiny muted" style={{ gap: 8 }}>{backend.shared ? 'Messages sync between devices automatically.' : 'Offline demo: messages stay in this browser.'}</div>
+      <div className="row tiny muted" style={{ gap: 8 }}>{backend.shared ? 'Messages sync between devices automatically.' : 'Messages are saved on this device only.'}</div>
     </div>
   );
 }

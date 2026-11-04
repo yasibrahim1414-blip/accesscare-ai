@@ -84,7 +84,7 @@ export function App() {
   const cls = ['app', prefs.largerText && 'large-text', prefs.largeButtons && 'large-buttons', prefs.reducedMotion && 'reduced-motion', signedIn ? 'has-side' : 'no-side'].filter(Boolean).join(' ');
   const strip = backend.mode === 'claude-cloud' ? { cls: 'cloud', text: 'Synced across your devices' }
     : backend.mode === 'supabase' || backend.mode === 'server' ? { cls: 'cloud', text: 'Synced through the AccessCare server' }
-    : { cls: 'local', text: backend.persistent ? 'Offline demo: this browser only' : 'Offline demo: storage blocked' };
+    : { cls: 'local', text: backend.persistent ? 'Saved on this device only' : 'Storage blocked on this device' };
   return (
     <div className={cls}>
       {signedIn && <SideNav />}

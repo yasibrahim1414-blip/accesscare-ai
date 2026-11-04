@@ -360,7 +360,7 @@ function Flow({ initial }: { initial: Consultation }) {
       <LuCircleCheck style={{ fontSize: 64, color: 'var(--ok)' }} aria-hidden />
       <h2 className="title">{sharedTo ? `Shared with ${sharedTo}` : 'Saved — not sent'}</h2>
       <p className="muted">{sharedTo
-        ? (backend.shared ? 'Your approved report is now in your doctor’s inbox. They can see it on their own device.' : 'Your approved report is in your doctor’s inbox in this offline demo.')
+        ? (backend.shared ? 'Your approved report is now in your doctor’s inbox. They can see it on their own device.' : 'Your approved report is in your doctor’s inbox on this device.')
         : 'Connect with a doctor, then open this consultation to send it.'}</p>
     </div>);
     footer = <Button big onClick={() => nav.replace({ name: 'p.detail', id: initial.id })}>View consultation</Button>;

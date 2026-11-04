@@ -44,14 +44,14 @@ export function SettingsScreen() {
         <h3 className="section">Data</h3>
         <div className="card tinted" style={{ gap: 8 }}>
           <div className="row"><span className="li-ico" style={{ width: 38, height: 38, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'var(--surface)' }}>{backend.shared ? <LuCloud /> : <LuDatabase />}</span>
-            <div className="grow"><b>{backend.mode === 'claude-cloud' ? 'Shared cloud database' : backend.mode === 'server' ? 'AccessCare server' : backend.mode === 'supabase' ? 'AccessCare server (Supabase)' : 'Offline demo storage'}</b>
+            <div className="grow"><b>{backend.mode === 'claude-cloud' ? 'Shared cloud database' : backend.mode === 'server' ? 'AccessCare server' : backend.mode === 'supabase' ? 'AccessCare server (Supabase)' : 'Saved on this device'}</b>
               <div className="small muted">{backend.mode === 'claude-cloud' || backend.mode === 'server' ? 'Synced across your devices. Health records are end-to-end encrypted.'
                 : backend.mode === 'supabase' ? 'Synced across devices, protected by row-level security.'
-                : backend.persistent ? 'Stored in this browser only. Not synced.' : 'Browser storage is blocked: data is lost when you close the app.'}</div></div></div>
+                : backend.persistent ? 'Stored on this device only. Not synced.' : 'Browser storage is blocked: data is lost when you close the app.'}</div></div></div>
         </div>
         {backend.mode === 'local-demo' && (
           <div className="list">
-            <button className="list-item" onClick={() => setSheet('reset')}><span className="li-ico"><LuRefreshCw /></span><div className="grow"><b>Reset local demo data</b><div className="small muted">Erase every account and consultation stored in this browser</div></div></button>
+            <button className="list-item" onClick={() => setSheet('reset')}><span className="li-ico"><LuRefreshCw /></span><div className="grow"><b>Erase the data on this device</b><div className="small muted">Erase every account and consultation stored on this device</div></div></button>
           </div>
         )}
       </div></div>
@@ -66,9 +66,9 @@ export function SettingsScreen() {
         body="Your doctor will lose access to your consultations. You keep your own copy and can reconnect with their Doctor ID."
         onConfirm={async () => { setBusy(true); try { await backend.disconnectDoctor(); refresh(); toast('Doctor disconnected'); } catch (e) { toast((e as Error).message); } close(); }}
         onCancel={close} />}
-      {sheet === 'reset' && <ConfirmSheet title="Reset all demo data?" danger confirmLabel="Erase everything in this browser" icon={<LuRefreshCw />}
-        body="This deletes all offline demo accounts, consultations, messages and notes stored in this browser. It cannot be undone."
-        onConfirm={async () => { await backend.resetDemoData?.(); try { localStorage.removeItem('accesscare.recent.v1'); } catch { /* */ } setMe(null); nav.reset({ name: 'welcome' }); toast('Demo data erased'); }}
+      {sheet === 'reset' && <ConfirmSheet title="Erase all data on this device?" danger confirmLabel="Erase everything on this device" icon={<LuRefreshCw />}
+        body="This deletes all accounts, consultations, messages and notes stored on this device. It cannot be undone."
+        onConfirm={async () => { await backend.resetDemoData?.(); try { localStorage.removeItem('accesscare.recent.v1'); } catch { /* */ } setMe(null); nav.reset({ name: 'welcome' }); toast('Data on this device erased'); }}
         onCancel={close} />}
       {sheet === 'delete' && (
         <ConfirmSheet title="Delete your account?" danger confirmLabel="Delete my account" icon={<LuTrash2 />} busy={busy}
@@ -93,7 +93,7 @@ export function AboutScreen() {
   const mode = backend.mode;
   return (
     <>
-      <TopBar title="About this prototype" />
+      <TopBar title="About AccessCare AI" />
       <div className="screen screen-in"><div className="pad">
         <Banner kind="warn"><b>Prototype.</b> Not for real medical use, not clinically validated and not a certified medical device. It does not diagnose.</Banner>
         <div className="card">

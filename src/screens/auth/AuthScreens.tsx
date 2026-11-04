@@ -5,7 +5,6 @@ import { homeFor, useApp, useLoad } from '../../app/AppContext';
 import { Banner, Button, Field, Steps, TopBar } from '../../ui/components';
 import type { Role } from '../../domain/types';
 import { DOCTOR_ID_PATTERN, normalizeDoctorId } from '../../services/crypto';
-import type { LocalDemoBackend } from '../../services/backend/LocalDemoBackend';
 import { activateBlindMode } from '../voice/VoiceCompanion';
 import { GestureRecognizer, TripleSwipeDetector, TripleTapDetector } from '../../services/voice/Gestures';
 
@@ -27,9 +26,7 @@ export function forgetAccount(email: string) {
 }
 
 export function WelcomeScreen() {
-  const { nav, backend, setMe, toast } = useApp();
-  const [busy, setBusy] = useState<string | null>(null);
-  const local = backend.mode === 'local-demo';
+  const { nav, backend } = useApp();
   const blind = () => { activateBlindMode(); nav.reset({ name: 'va' }); };
   // three deliberate left swipes anywhere on this screen turn on Blind Mode (touch only; scrolling never counts)
   const rec = React.useMemo(() => new GestureRecognizer(), []);
@@ -65,19 +62,6 @@ export function WelcomeScreen() {
     },
   };
 
-  const tryDemo = async (role: Role) => {
-    setBusy(role);
-    try {
-      const demo = backend as LocalDemoBackend;
-      const d = await demo.seedDemo!();
-      const me = await backend.signIn({ email: role === 'doctor' ? d.doctorEmail : d.patientEmail, password: d.password });
-      rememberAccount(me.profile.email, me.profile.fullName, me.profile.role);
-      setMe(me); nav.reset(homeFor(me));
-      toast(`Signed in as the demo ${role}`);
-    } catch (e) { toast((e as Error).message); }
-    finally { setBusy(null); }
-  };
-
   return (
     <div className="screen screen-in" {...touch} style={{ touchAction: 'pan-y' }} data-testid="welcome">
       <div className="welcome">
@@ -104,16 +88,6 @@ export function WelcomeScreen() {
           </div>
           <p className="tiny muted" style={{ textAlign: 'center' }}>AccessCare AI helps you communicate. It does not diagnose. In an emergency, call your local emergency number.</p>
           <div style={{ textAlign: 'center' }}><InstallApp compact /></div>
-          {local && (
-            <div className="card tinted">
-              <b>Offline demo</b>
-              <p className="small muted">This copy isn’t connected to the shared database, so accounts stay in this browser only. Ready-made demo accounts:</p>
-              <div className="grid2">
-                <Button variant="secondary" onClick={() => tryDemo('patient')} busy={busy === 'patient'}><LuUserRound /> Patient</Button>
-                <Button variant="secondary" onClick={() => tryDemo('doctor')} busy={busy === 'doctor'}><LuStethoscope /> Doctor</Button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
@@ -198,7 +172,6 @@ export function SignInScreen({ email: initialEmail, notice }: { email?: string; 
             <Field id="signin-email" label="Email or Patient ID" value={email} onChange={setEmail} autoComplete="username" />
           </>}
           {(!cloud || roles.length > 0) && <Field id="signin-password" label={cloud ? 'AccessCare password' : 'Password'} type="password" value={password} onChange={setPassword} autoComplete="current-password" />}
-          {!cloud && email.endsWith('@accesscare.demo') && <p className="small muted">Demo account password: <span className="mono">demo-pass-123</span></p>}
           {err && <Banner kind="danger">{err}</Banner>}
           {(!cloud || roles.length > 0) && <Button big block type="submit" busy={busy}><LuLock aria-hidden /> Log in</Button>}
           <div className="row between">
@@ -226,7 +199,7 @@ export function ForgotScreen() {
         ) : <>
           <Field id="forgot-email" label="Email" type="email" value={email} onChange={setEmail} />
           <Button block onClick={async () => setRes((await backend.requestPasswordReset(email)).supported)}>Send reset link</Button>
-          {res === false && <Banner kind="warn">Password reset by email isn’t available in the offline demo. Demo accounts can be recreated from Settings → Reset demo data.</Banner>}
+          {res === false && <Banner kind="warn">Password reset by email isn’t available while accounts are saved on this device only.</Banner>}
           {res === true && <Banner kind="ok">If an account exists for that email, a reset link is on its way.</Banner>}
         </>}
       </div></div>
@@ -339,7 +312,7 @@ export function SignUpScreen() {
           <Button big block type="submit" busy={busy}>Continue Registration</Button>
           <p className="tiny muted">{backend.mode === 'claude-cloud' ? 'Saved to the shared AccessCare database, so you can log in from any device signed in to this Claude account.'
             : backend.mode === 'server' ? 'Saved to the AccessCare server, encrypted on this device — log in from any phone or computer with your email and password.'
-            : backend.mode === 'supabase' ? 'Saved to the AccessCare server.' : 'Offline demo: this account lives only in this browser.'}</p>
+            : backend.mode === 'supabase' ? 'Saved to the AccessCare server.' : 'This account is saved on this device only.'}</p>
         </form>
       </div>
     </>
