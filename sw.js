@@ -2,7 +2,7 @@
 // It keeps the app's own files on the device so the installed app opens without the website and
 // without a connection. It never stores health data: accounts, messages, AI and voices are network
 // requests to the AccessCare server and are never cached here.
-const VERSION = '15fa65e78a65';
+const VERSION = 'e9825002d866';
 const CACHE = `accesscare-${VERSION}`;
 const CORE = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 const LARGE = ['./body.glb', './mp/vision_wasm_internal.wasm', './mp/hand_landmarker.task'];
