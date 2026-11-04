@@ -1,0 +1,77 @@
+# Builds the AccessCare Android app (android/) and publishes AccessCare.apk on the repository's Releases page:
+# https://github.com/yasibrahim1414-blip/accesscare-ai/releases/latest/download/AccessCare.apk
+name: Android app
+
+on:
+  push:
+    branches: [source]
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      # The signing key stays in this repository's private build cache (never in the code), so each new
+      # build can be installed over the previous one. If the cache is ever lost, a new key is made and the
+      # old app has to be removed once before the new one installs.
+      - name: Signing key (restore)
+        id: key
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.accesscare-signing
+          key: accesscare-signing-v1
+
+      - name: Signing key (create if missing)
+        if: steps.key.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.accesscare-signing
+          openssl rand -hex 24 > ~/.accesscare-signing/password
+          keytool -genkeypair -v -keystore ~/.accesscare-signing/release.jks -alias accesscare \
+            -keyalg RSA -keysize 3072 -validity 10000 \
+            -storepass "$(cat ~/.accesscare-signing/password)" -keypass "$(cat ~/.accesscare-signing/password)" \
+            -dname "CN=AccessCare AI, O=AccessCare AI"
+
+      - name: Signing key (save)
+        if: steps.key.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.accesscare-signing
+          key: accesscare-signing-v1
+
+      - name: Build
+        working-directory: android
+        run: |
+          export KEYSTORE_FILE=$HOME/.accesscare-signing/release.jks
+          export KEYSTORE_PASSWORD="$(cat $HOME/.accesscare-signing/password)"
+          export KEY_ALIAS=accesscare
+          export VERSION_CODE=${{ github.run_number }}
+          gradle --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../AccessCare.apk
+          "$ANDROID_HOME"/build-tools/$(ls "$ANDROID_HOME"/build-tools | sort -V | tail -1)/apksigner verify --print-certs ../AccessCare.apk | head -3
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="AccessCare for Android, build ${{ github.run_number }} (from commit ${GITHUB_SHA::7}). Opens the AccessCare app full screen; the app itself is loaded from https://yasibrahim1414-blip.github.io/accesscare-ai/ so it updates automatically."
+          if gh release view android-app >/dev/null 2>&1; then
+            gh release upload android-app AccessCare.apk --clobber
+            gh release edit android-app --title "AccessCare for Android (build ${{ github.run_number }})" --notes "$NOTES" --latest
+          else
+            gh release create android-app AccessCare.apk --title "AccessCare for Android (build ${{ github.run_number }})" --notes "$NOTES" --latest --target "$GITHUB_SHA"
+          fi

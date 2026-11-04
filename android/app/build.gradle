@@ -1,0 +1,35 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'ai.accesscare.app'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'ai.accesscare.app'
+        minSdk 24
+        targetSdk 34
+        versionCode (System.getenv('VERSION_CODE') ?: '1') as Integer
+        versionName '1.0.' + (System.getenv('VERSION_CODE') ?: '1')
+    }
+    signingConfigs {
+        release {
+            // the signing key comes from the build server's secrets, never from the repository
+            def ks = System.getenv('KEYSTORE_FILE')
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KEY_ALIAS')
+                keyPassword System.getenv('KEYSTORE_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig System.getenv('KEYSTORE_FILE') ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
