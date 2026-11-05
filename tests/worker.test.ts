@@ -50,7 +50,7 @@ test('worker: conversation prompts, answer size, natural voice route and status 
     assert.equal(JSON.parse(sent[1].body).max_tokens, 1200, 'answer size is capped');
     // status: tells which services exist, never the keys
     r = await worker.fetch(new Request('https://w/status', { headers: { origin: 'https://app.example' } }), full);
-    const st = await r.json(); assert.deepEqual(st, { version: 11, db: false, ai: true, model: 'claude-haiku-5-5', tts: true, ttsProvider: 'Azure AI Speech', ttsLangs: ['ar', 'en', 'fr', 'ur', 'hi'], stt: false, sttProvider: null });
+    const st = await r.json(); assert.deepEqual(st, { version: 12, db: false, dbBinding: null, ai: true, model: 'claude-haiku-5-5', tts: true, ttsProvider: 'Azure AI Speech', ttsLangs: ['ar', 'en', 'fr', 'ur', 'hi'], stt: false, sttProvider: null });
     assert.doesNotMatch(JSON.stringify(st), /secret/);
     assert.equal((await (await worker.fetch(new Request('https://w/status', { headers: { origin: 'https://app.example' } }), env)).json()).tts, false);
     // tts
@@ -175,4 +175,16 @@ test('worker v11: the downloaded app on the person’s own computer (localhost) 
   assert.equal(await st('http://localhost.evil.example'), 403);
   assert.equal(await st('https://evil.example'), 403);
   assert.equal(await st('null'), 403, 'a page opened as a file (or a sandboxed frame) is not allowed by default');
+});
+
+test('worker v12: the D1 database is found under any binding name (not only DB)', async () => {
+  const calls: string[] = [];
+  const stmt = (sql: string) => ({ bind: () => stmt(sql), run: async () => ({}), first: async () => null, all: async () => ({ results: [] }), _sql: sql });
+  const fakeD1 = { prepare: (sql: string) => { calls.push(sql); return stmt(sql); }, batch: async (s: unknown[]) => s.map(() => ({})), exec: async () => ({}) };
+  const status = async (env: Record<string, unknown>) => (await (await worker.fetch(new Request('https://w.example/status', { headers: { Origin: 'https://yasibrahim1414-blip.github.io' } }), env)).json()) as { version: number; db: boolean; dbBinding: string | null };
+  const named = await status({ accesscare_db: fakeD1, AI: { run: async () => ({}) } });
+  assert.equal(named.version, 12); assert.equal(named.db, true); assert.equal(named.dbBinding, 'accesscare_db');
+  assert.equal((await status({ DB: fakeD1 })).dbBinding, 'DB');
+  const none = await status({ AI: { run: async () => ({}) }, SOME_TEXT: 'x' });
+  assert.equal(none.db, false); assert.equal(none.dbBinding, null, 'a Workers AI binding or text is not taken for a database');
 });
