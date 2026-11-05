@@ -33,7 +33,9 @@ self.addEventListener('fetch', (e) => {
   const same = url.origin === self.location.origin;
   const scope = new URL(self.registration.scope).pathname;
   // only the app's own files inside its folder; anything else (the AccessCare server, AI, accounts) is never stored
-  const appFile = same && url.pathname.startsWith(scope) && !url.search && (url.pathname === scope || /\.(html|webmanifest|png|glb|wasm|task|js)$/.test(url.pathname));
+  const inScope = same && url.pathname.startsWith(scope);
+  // opening the app (also with a link such as ?doctor=… from a doctor's QR code), or one of its own files
+  const appFile = inScope && (req.mode === 'navigate' || (!url.search && (url.pathname === scope || /\.(html|webmanifest|png|glb|wasm|task|js)$/.test(url.pathname))));
   if (!appFile && !FONTS.test(req.url)) return;
   if (same && (req.mode === 'navigate' || url.pathname.endsWith('/index.html') || url.pathname.endsWith('/'))) {
     // the page: newest from the network when online, the stored copy when offline

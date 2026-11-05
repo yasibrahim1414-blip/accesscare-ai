@@ -15,6 +15,7 @@ import { WebSyncBackend } from './services/backend/WebSyncBackend';
 import { CloudBackend } from './services/backend/CloudBackend';
 import { SupabaseBackend } from './services/backend/SupabaseBackend';
 import type { CloudDb, CloudUser } from './services/backend/cloudDb';
+import { takeDoctorFromAddress } from './services/care/doctorQr';
 import { DemoIntentBridge } from './services/intentBridge/DemoIntentBridge';
 import { createDefaultStore } from './services/storage';
 import { ClaudeAI, NoAI, aiConsent, type AIAssist, type SampleFn } from './services/ai/AIAssist';
@@ -86,6 +87,7 @@ function registerOffline() {
 }
 
 async function boot() {
+  takeDoctorFromAddress(); // a doctor's QR link: ?doctor=AC-DOC-…
   registerOffline();
   const style = document.createElement('style');
   style.textContent = CSS;

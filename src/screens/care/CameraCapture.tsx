@@ -9,7 +9,7 @@ import { useLang, tr } from '../../i18n/lang';
 import { CAMERA_ERROR_TEXT, cameraSupport, classifyCameraError, type CameraError } from '../../services/camera/camera';
 import { frameBrightness } from '../../services/care/photos';
 
-const AR_ERR: Record<CameraError, string> = {
+export const AR_CAMERA_ERR: Record<CameraError, string> = {
   unsupported: 'المتصفح ده مش بيقدر يستخدم الكاميرا.',
   insecure: 'الكاميرا بتشتغل بس في صفحة آمنة (https).',
   blocked: 'الكاميرا مش مسموحة في العرض ده. استخدم "اختار صورة" أو افتح نسخة الموقع في المتصفح.',
@@ -73,7 +73,7 @@ export function CameraCapture({ onPhoto, facing = 'environment', purpose, busy, 
         {state !== 'on' && <div className="cam-placeholder"><LuCamera aria-hidden /><p className="small">{purpose}</p></div>}
         {state === 'on' && hint && <p className="capture-hint" role="status">{hint}</p>}
       </div>
-      {err && <p className="small danger-text" role="alert">{tr(CAMERA_ERROR_TEXT[err], AR_ERR[err], lang)}</p>}
+      {err && <p className="small danger-text" role="alert">{tr(CAMERA_ERROR_TEXT[err], AR_CAMERA_ERR[err], lang)}</p>}
       <div className="cam-btns">
         {state === 'on' ? (
           <>

@@ -19,17 +19,29 @@ import type { ConsultationStatus, CommunicationPreferences } from '../../domain/
 import { STATUS_LABELS } from '../../domain/types';
 import { regionLabel } from '../../domain/bodyRegions';
 import type { ConsultationView } from '../../services/backend/Backend';
+import { qrMatrix, qrPath } from '../../services/care/qr';
+import { doctorLink } from '../../services/care/doctorQr';
 
 export function DoctorIdCard({ compact }: { compact?: boolean }) {
   const { me, toast } = useApp();
   const [saved, setSaved] = useState(false);
   const id = me!.doctor!.doctorId;
+  const qr = React.useMemo(() => { try { return qrPath(qrMatrix(doctorLink(id))); } catch { return null; } }, [id]);
   const copy = async () => toast((await copyText(id)) ? 'Doctor ID copied' : 'Copy is blocked here — press and hold the ID to select it');
   return (
     <div className="idcard" data-testid="doctor-id-card">
       <span className="lbl">Your Doctor ID</span>
       <span className="code" data-testid="doctor-id">{id}</span>
       {!compact && <span className="small" style={{ color: '#c9dcee', position: 'relative' }}>Share this ID with your patients. They enter it to connect with you. It’s an identifier, not a password, and it never changes.</span>}
+      {qr && (
+        <div style={{ position: 'relative', display: 'grid', justifyItems: 'center', gap: 6 }}>
+          <svg className="qr" viewBox={`0 0 ${qr.size} ${qr.size}`} role="img" shapeRendering="crispEdges" data-testid="doctor-qr"
+            aria-label={`QR code with your Doctor ID ${id}`} style={{ width: compact ? 'min(180px, 60vw)' : 'min(260px, 72vw)', border: 0 }}>
+            <rect width={qr.size} height={qr.size} fill="#fff" /><path d={qr.d} fill="#000" />
+          </svg>
+          <span className="small" style={{ color: '#c9dcee', textAlign: 'center' }}>Patients scan this code with the AccessCare app (or their phone camera) to connect with you. They still confirm your name before connecting.</span>
+        </div>
+      )}
       <div className="grid2">
         <Button variant="secondary" onClick={copy}><LuCopy aria-hidden /> Copy ID</Button>
         <Button variant="secondary" onClick={() => setSaved(true)}><LuSave aria-hidden /> Save ID</Button>
@@ -41,7 +53,7 @@ export function DoctorIdCard({ compact }: { compact?: boolean }) {
 
 function SaveIdSheet({ id, name, onClose }: { id: string; name: string; onClose: () => void }) {
   const { toast } = useApp();
-  const text = `${name} — AccessCare AI Doctor ID: ${id}\nPatients: open AccessCare AI, choose “Connect with a Doctor” and enter this ID.`;
+  const text = `${name} — AccessCare AI Doctor ID: ${id}\nPatients: open AccessCare AI, choose “Connect with a Doctor” and enter this ID, or open this link: ${doctorLink(id)}`;
   return (
     <ConfirmSheet title="Save your Doctor ID" icon={<LuIdCard />} confirmLabel="Copy this text" onCancel={onClose}
       onConfirm={async () => { toast((await copyText(text)) ? 'Copied — paste it into your notes' : 'Select the text above to copy it'); onClose(); }}
@@ -62,8 +74,8 @@ export function DoctorIdScreen({ justCreated }: { justCreated?: boolean }) {
         <div className="card">
           <b>How patients connect</b>
           <ol className="small muted" style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 6 }}>
-            <li>You give the patient this ID.</li>
-            <li>They enter it when signing up, or later under “My doctor”.</li>
+            <li>You show the patient the QR code, or give them this ID.</li>
+            <li>They scan it or enter it when signing up, or later under “My doctor”.</li>
             <li>They see your name and confirm it’s you.</li>
             <li>They appear in your patient list{backend.shared ? ' on every device you log in from' : ''}.</li>
           </ol>

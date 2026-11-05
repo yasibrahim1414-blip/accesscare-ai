@@ -1,6 +1,8 @@
 import { InstallApp } from '../../ui/InstallApp';
 import React, { useEffect, useState } from 'react';
-import { LuHeartPulse, LuPersonStanding, LuSparkles, LuShieldCheck, LuStethoscope, LuUserRound, LuCloud, LuLock, LuLogOut, LuHeartHandshake } from 'react-icons/lu';
+import { LuHeartPulse, LuPersonStanding, LuSparkles, LuShieldCheck, LuStethoscope, LuUserRound, LuCloud, LuLock, LuLogOut, LuHeartHandshake, LuQrCode } from 'react-icons/lu';
+import { ScanDoctorQr } from '../shared/ScanDoctorQr';
+import { pendingDoctor, clearPendingDoctor } from '../../services/care/doctorQr';
 import { homeFor, useApp, useLoad } from '../../app/AppContext';
 import { Banner, Button, Field, Steps, TopBar } from '../../ui/components';
 import type { Role } from '../../domain/types';
@@ -82,6 +84,7 @@ export function WelcomeScreen() {
             <div className="feature"><div className="fi"><LuSparkles /></div><div><b>Questions that fit you</b><p className="small muted">Yes/No, pictures or short choices fill in what’s missing. Nothing is guessed.</p></div></div>
             <div className="feature"><div className="fi"><LuShieldCheck /></div><div><b>You approve every word</b><p className="small muted">Only the summary you confirm goes to the doctor you chose{backend.mode === 'claude-cloud' || backend.mode === 'server' ? ', encrypted so only the two of you can read it' : ''}.</p></div></div>
           </div>
+          {pendingDoctor() && <div data-testid="doctor-link-note"><Banner kind="info"><span>Your doctor’s ID is ready. Create an account or log in, then confirm your doctor.</span> <b className="mono" data-no-tr dir="ltr">{pendingDoctor()}</b></Banner></div>}
           <div className="stack">
             <Button big block onClick={() => nav.push({ name: 'signup' })}>Create an account</Button>
             <Button variant="secondary" big block onClick={() => nav.push({ name: 'signin' })}>Log in</Button>
@@ -216,7 +219,8 @@ export function SignUpScreen() {
   const existing = info.data?.existingRoles ?? [];
   const [step, setStep] = useState<Step>('role');
   const [role, setRole] = useState<Role | null>(null);
-  const [f, setF] = useState({ fullName: '', email: '', password: '', confirm: '', doctorId: '', specialty: '', clinic: '' });
+  const [f, setF] = useState({ fullName: '', email: '', password: '', confirm: '', doctorId: pendingDoctor() ?? '', specialty: '', clinic: '' });
+  const [scan, setScan] = useState(false);
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [formErr, setFormErr] = useState<string | null>(null);
@@ -246,6 +250,7 @@ export function SignUpScreen() {
       setMe(me);
       if (role === 'doctor') { nav.reset({ name: 'd.id', justCreated: true }); toast('Doctor account created'); return; }
       if (role === 'caregiver') { nav.reset({ name: 'c.home' }); toast('Caregiver account created'); return; }
+      clearPendingDoctor();
       if (f.doctorId.trim()) nav.reset({ name: 'p.connect', afterSignup: true, initialId: normalizeDoctorId(f.doctorId) });
       else nav.reset({ name: 'p.onboard' });
     } catch (e) { setFormErr((e as Error).message); }
@@ -304,8 +309,10 @@ export function SignUpScreen() {
             <div className="card tinted">
               <Field id="su-doctor-id" label="Doctor ID — Optional" value={f.doctorId} onChange={(v) => set('doctorId')(v.toUpperCase())} error={errs.doctorId}
                 placeholder="AC-DOC-7K4P9X" maxLength={20} mono
-                hint="Already have a doctor on AccessCare AI? Enter their Doctor ID to connect with them now. You can also skip this step and connect later." />
-              {f.doctorId && <Button type="button" variant="ghost" onClick={() => set('doctorId')('')}>Skip for now</Button>}
+                hint="Already have a doctor on AccessCare AI? Enter their Doctor ID or scan their QR code to connect with them now. You can also skip this step and connect later." />
+              {scan ? <ScanDoctorQr compact onId={(v) => { set('doctorId')(v); setScan(false); }} />
+                : <Button type="button" variant="secondary" onClick={() => setScan(true)} data-testid="su-scan"><LuQrCode aria-hidden /> Scan the doctor’s QR code</Button>}
+              {f.doctorId && <Button type="button" variant="ghost" onClick={() => { set('doctorId')(''); clearPendingDoctor(); }}>Skip for now</Button>}
             </div>
           )}
           {formErr && <Banner kind="danger">{formErr}</Banner>}

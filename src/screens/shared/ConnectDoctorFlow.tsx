@@ -3,6 +3,7 @@ import { LuBadgeCheck, LuStethoscope } from 'react-icons/lu';
 import { useApp } from '../../app/AppContext';
 import { Banner, Button, Field, initials } from '../../ui/components';
 import type { DoctorPublicInfo } from '../../domain/types';
+import { ScanDoctorQr } from './ScanDoctorQr';
 
 /**
  * Doctor ID connection: enter → validate against doctor records → show the
@@ -73,8 +74,10 @@ export function ConnectDoctorFlow({ initialId = '', autoLookup, onDone, skipLabe
     <div className="stack">
       <div className="row" style={{ alignItems: 'flex-start' }}>
         <div className="feature"><div className="fi"><LuStethoscope /></div></div>
-        <p className="muted small grow">Already have a doctor on AccessCare AI? Enter their Doctor ID to connect with them now. You can also skip this step and connect later.</p>
+        <p className="muted small grow">Already have a doctor on AccessCare AI? Scan their QR code or enter their Doctor ID to connect with them now. You can also skip this step and connect later.</p>
       </div>
+      <ScanDoctorQr onId={(v) => { setId(v); void lookup(v); }} />
+      <p className="tiny muted" style={{ textAlign: 'center', margin: 0 }}>or type the Doctor ID</p>
       <Field id="doctor-id-input" label="Doctor ID — Optional" value={id} onChange={(v) => { setId(v.toUpperCase()); setErr(null); }}
         placeholder="AC-DOC-7K4P9X" error={err} hint="Ask your doctor for this code. It looks like AC-DOC-7K4P9X." maxLength={20} mono />
       <Button big block onClick={() => lookup()} busy={busy}>Connect Doctor</Button>

@@ -1,6 +1,7 @@
 import { CallLayer } from '../screens/shared/LiveCall';
 import React from 'react';
 import { useApp, type Route } from './AppContext';
+import { pendingDoctor, clearPendingDoctor } from '../services/care/doctorQr';
 import { SideNav, TabBar, UtilityBar, TAB_ROUTES, useFocusOnNavigate } from './Shell';
 import { WelcomeScreen, SignInScreen, SignUpScreen, ForgotScreen } from '../screens/auth/AuthScreens';
 import { PatientHome, PatientHistory, PatientDetail, MyDoctorScreen, ConnectScreen, PreferencesScreen, PatientProfile, OnboardingScreen } from '../screens/patient/PatientScreens';
@@ -78,6 +79,13 @@ function Screen({ route }: { route: Route }) {
 export function App() {
   const { me, nav, prefs, backend } = useApp();
   useFocusOnNavigate();
+  // a patient who opened a doctor's QR link: go to "Connect with a Doctor" with the ID filled in (they still confirm)
+  React.useEffect(() => {
+    const id = pendingDoctor();
+    if (!id || me?.profile.role !== 'patient') return;
+    clearPendingDoctor();
+    nav.push({ name: 'p.connect', initialId: id });
+  }, [me?.profile.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const signedIn = !!me;
   const voice = nav.route.name === 'va' || nav.route.name === 'talk';
   const showTabs = signedIn && TAB_ROUTES.has(nav.route.name);
