@@ -13,16 +13,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Browser
         run: |
-          pip install playwright==1.55.0
-          python -m playwright install --with-deps chromium
+          ( pip install playwright && python -m playwright install --with-deps chromium ) > install.log 2>&1 || { printf '::error::install failed: %s\n' "$(tail -30 install.log | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"; exit 1; }
       - name: Wait for the website to be updated
         run: sleep 90
       - name: Live check
         env:
           RUN: ${{ github.run_number }}-${{ github.run_attempt }}
-        run: python tests/live/live_check.py
+        run: |
+          python tests/live/live_check.py > live.log 2>&1; code=$?
+          cat live.log
+          if [ $code -ne 0 ] && ! grep -q "::" live.log; then printf '::error::%s\n' "$(tail -30 live.log | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"; fi
+          exit $code
