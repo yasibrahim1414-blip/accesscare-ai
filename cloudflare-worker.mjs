@@ -8,7 +8,7 @@
 //   POST /tts     → natural speech (optional; mp3): Azure AI Speech if configured, otherwise Cloudflare Workers AI
 //   POST /stt     → speech to text with Whisper on Cloudflare Workers AI (optional; for browsers that can't do it themselves)
 //   POST /fda     → FDA drug label lookup by generic name (openFDA; only a medicine name is sent)
-//   POST /db      → shared storage for the web version (optional; needs a D1 database bound as DB).
+//   POST /db      → shared storage for the web version (optional; needs a D1 database bound to this worker; v12 finds it under any variable name, DB is the usual one).
 //                   Stores only what the app already encrypted end to end; each account writes only its own paths.
 //   GET  /status  → which services are configured (no secrets)
 //
@@ -51,7 +51,7 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_IMAGE_B64 = 1_600_000; // about 1.2 MB of image
 const CLINICAL = 'You support a licensed doctor reviewing a patient-approved symptom report.';
 const MAX_PROMPT = 12000;
-const VERSION = 11; // the app checks this to tell you when the worker code is out of date
+const VERSION = 12; // the app checks this to tell you when the worker code is out of date
 const MAX_TTS = 1500;
 const MAX_AUDIO_B64 = 2_000_000; // about 1.5 MB of recorded speech (a short answer)
 const LANGS = ['ar', 'en', 'fr', 'ur', 'hi'];
@@ -130,6 +130,14 @@ function matches(data, where) {
   return true;
 }
 
+/** The D1 database: the binding named DB, or (version 12) any D1 database bound to this worker under another name. */
+function findDb(env) {
+  if (env.DB) return { db: env.DB, name: 'DB' };
+  for (const [name, v] of Object.entries(env || {})) {
+    if (v && typeof v === 'object' && typeof v.prepare === 'function' && typeof v.batch === 'function' && typeof v.exec === 'function') return { db: v, name };
+  }
+  return null;
+}
 // in-memory store: only for local tests (env.MEMORY_DB === '1'); a real deployment uses D1
 const mem = { docs: new Map(), auth: new Map(), seq: 0 };
 export function __resetMemoryDb() { mem.docs.clear(); mem.auth.clear(); mem.seq = 0; }
@@ -168,7 +176,8 @@ const d1Store = (DB) => ({
 });
 
 export async function handleDb(request, body, env, headers) {
-  const store = env.DB ? d1Store(env.DB) : env.MEMORY_DB === '1' ? memStore : null;
+  const found = findDb(env);
+  const store = found ? d1Store(found.db) : env.MEMORY_DB === '1' ? memStore : null;
   if (!store) return json({ error: 'db_not_configured' }, 501, headers);
   await store.init();
   const op = String(body?.op || '');
@@ -272,7 +281,7 @@ export default {
     if (!c.ok) return json({ error: 'origin_not_allowed' }, 403, c.headers);
 
     if (url.pathname.endsWith('/status') && request.method === 'GET') {
-      return json({ version: VERSION, db: !!env.DB || env.MEMORY_DB === '1', ai: !!apiKey(env), model: env.MODEL || 'claude-haiku-5-5', tts: ttsPlan(env).langs.length > 0, ttsProvider: ttsPlan(env).provider, ttsLangs: ttsPlan(env).langs, stt: !!env.AI, sttProvider: env.AI ? 'Whisper (Cloudflare Workers AI)' : null }, 200, c.headers);
+      return json({ version: VERSION, db: !!findDb(env) || env.MEMORY_DB === '1', dbBinding: findDb(env)?.name ?? null, ai: !!apiKey(env), model: env.MODEL || 'claude-haiku-5-5', tts: ttsPlan(env).langs.length > 0, ttsProvider: ttsPlan(env).provider, ttsLangs: ttsPlan(env).langs, stt: !!env.AI, sttProvider: env.AI ? 'Whisper (Cloudflare Workers AI)' : null }, 200, c.headers);
     }
     if (request.method !== 'POST') return json({ error: 'method' }, 405, c.headers);
     let body;
