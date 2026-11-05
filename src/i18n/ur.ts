@@ -1995,4 +1995,6 @@ export const UR: Record<string, string> = {
   'Starting the camera…': 'کیمرا شروع ہو رہا ہے…',
   'Point the camera at the QR code on your doctor’s screen.': 'کیمرا اپنے ڈاکٹر کی اسکرین پر موجود QR کوڈ کی طرف کریں۔',
   'Stop the camera': 'کیمرا بند کریں',
+  'Synced': 'ہم آہنگ',
+  'This device only': 'صرف یہ آلہ',
 };

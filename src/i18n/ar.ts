@@ -281,6 +281,8 @@ export const AR: Record<string, string> = {
   "They scan it or enter it when signing up, or later under “My doctor”.": "يمسحه أو يكتبه وهو بيعمل الحساب، أو بعدين من «طبيبي».",
   "Already have a doctor on AccessCare AI? Scan their QR code or enter their Doctor ID to connect with them now. You can also skip this step and connect later.": "عندك طبيب على أكسس كير؟ امسح كود QR بتاعه أو اكتب رقم الطبيب علشان تتصل بيه دلوقتي. تقدر كمان تتخطى الخطوة دي وتتصل بعدين.",
   "or type the Doctor ID": "أو اكتب رقم الطبيب",
+  'Synced': 'متزامن',
+  'This device only': 'على هذا الجهاز فقط',
   'About AccessCare AI': 'عن أكسس كير AI',
   'About': 'عن التطبيق',
   'Blind Mode': 'الوضع الصوتي',

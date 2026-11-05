@@ -83,7 +83,8 @@ h1:focus, h1:focus-visible { outline: none; box-shadow: none; }
 .utilbar { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; padding-top: calc(6px + env(safe-area-inset-top, 0px)); background: var(--surface); border-bottom: 1px solid var(--line); min-height: 48px; }
 .mode-strip { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: .78em; font-weight: 700; color: var(--muted); }
 .mode-strip .ms-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 440px) { .mode-strip .ms-text { font-size: 0; } .mode-strip .ms-text .dot { font-size: 12px; } }
+.mode-strip .ms-short { display: none; }
+@media (max-width: 440px) { .mode-strip .ms-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } .mode-strip .ms-short { display: inline; } }
 .mode-strip.cloud .dot { background: var(--ok); }
 .mode-strip.local .dot { background: var(--warn); }
 .mode-strip button { flex: none; border: 0; background: transparent; color: var(--teal-ink); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font-size: 1em; font-weight: 700; min-height: 36px; padding: 0 4px; }

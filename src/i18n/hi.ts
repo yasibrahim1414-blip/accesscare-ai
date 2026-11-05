@@ -1995,4 +1995,6 @@ export const HI: Record<string, string> = {
   'Starting the camera…': 'कैमरा शुरू हो रहा है…',
   'Point the camera at the QR code on your doctor’s screen.': 'कैमरे को अपने डॉक्टर की स्क्रीन पर दिख रहे QR कोड की ओर करें।',
   'Stop the camera': 'कैमरा बंद करें',
+  'Synced': 'सिंक',
+  'This device only': 'सिर्फ़ यह डिवाइस',
 };

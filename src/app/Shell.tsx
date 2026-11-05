@@ -141,11 +141,11 @@ export function BlindButton({ wide }: { wide?: boolean }) {
 }
 
 /** Top strip on phones (and on wide screens without the side bar): storage notice, language, Blind Mode. */
-export function UtilityBar({ strip, showBlind }: { strip: { cls: string; text: string }; showBlind: boolean }) {
+export function UtilityBar({ strip, showBlind }: { strip: { cls: string; text: string; short: string }; showBlind: boolean }) {
   return (
     <div className="utilbar" style={{ order: -1 }}>
       <div className={`mode-strip ${strip.cls}`} role="note" data-testid="mode-strip">
-        <span className="ms-text"><span className="dot" aria-hidden />{strip.text}</span>
+        <span className="ms-text"><span className="dot" aria-hidden /><span className="ms-long">{strip.text}</span><span className="ms-short" aria-hidden>{strip.short}</span></span>
       </div>
       <div className="util-actions">
         <LangSwitch />

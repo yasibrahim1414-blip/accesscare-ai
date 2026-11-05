@@ -90,9 +90,9 @@ export function App() {
   const voice = nav.route.name === 'va' || nav.route.name === 'talk';
   const showTabs = signedIn && TAB_ROUTES.has(nav.route.name);
   const cls = ['app', prefs.largerText && 'large-text', prefs.largeButtons && 'large-buttons', prefs.reducedMotion && 'reduced-motion', signedIn ? 'has-side' : 'no-side'].filter(Boolean).join(' ');
-  const strip = backend.mode === 'claude-cloud' ? { cls: 'cloud', text: 'Synced across your devices' }
-    : backend.mode === 'supabase' || backend.mode === 'server' ? { cls: 'cloud', text: 'Synced through the AccessCare server' }
-    : { cls: 'local', text: backend.persistent ? 'Saved on this device only' : 'Storage blocked on this device' };
+  const strip = backend.mode === 'claude-cloud' ? { cls: 'cloud', text: 'Synced across your devices', short: 'Synced' }
+    : backend.mode === 'supabase' || backend.mode === 'server' ? { cls: 'cloud', text: 'Synced through the AccessCare server', short: 'Synced' }
+    : { cls: 'local', text: backend.persistent ? 'Saved on this device only' : 'Storage blocked on this device', short: 'This device only' };
   return (
     <div className={cls}>
       {signedIn && <SideNav />}

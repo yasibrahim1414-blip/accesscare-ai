@@ -1,0 +1,28 @@
+# Checks the real website + server: accounts on the server, used from four separate browsers (= devices).
+# The check accounts are deleted again at the end. Results appear as notes on the commit.
+name: Live check
+
+on:
+  push:
+    branches: [source]
+    paths: ['tests/live/**', '.github/workflows/live-check.yml']
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Browser
+        run: |
+          pip install playwright==1.55.0
+          python -m playwright install --with-deps chromium
+      - name: Wait for the website to be updated
+        run: sleep 90
+      - name: Live check
+        env:
+          RUN: ${{ github.run_number }}-${{ github.run_attempt }}
+        run: python tests/live/live_check.py

@@ -1995,4 +1995,6 @@ export const FR: Record<string, string> = {
   'Starting the camera…': 'Démarrage de la caméra…',
   'Point the camera at the QR code on your doctor’s screen.': 'Dirigez la caméra vers le code QR sur l’écran de votre médecin.',
   'Stop the camera': 'Arrêter la caméra',
+  'Synced': 'Synchronisé',
+  'This device only': 'Cet appareil uniquement',
 };
